@@ -1,0 +1,57 @@
+{
+  "name": "@sourceiq/server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "SourceIQ Express API: PDF ingestion, local BGE embeddings, Atlas Vector Search, RAG chat.",
+  "main": "dist/index.js",
+  "engines": {
+    "node": ">=20.11.0"
+  },
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc -p tsconfig.build.json",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit",
+    "model:download": "tsx scripts/download-model.ts",
+    "model:verify": "tsx scripts/verify-model.ts",
+    "model:info": "tsx scripts/model-info.ts",
+    "atlas:index": "tsx scripts/create-atlas-index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
+    "test:coverage": "vitest run --coverage",
+    "test:e2e": "playwright test"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "3.7.6",
+    "@google/genai": "1.30.0",
+    "bcryptjs": "3.0.2",
+    "compression": "1.8.1",
+    "cors": "2.8.5",
+    "dotenv": "17.2.3",
+    "express": "4.21.2",
+    "helmet": "8.1.0",
+    "jsonwebtoken": "9.0.2",
+    "mongoose": "8.20.1",
+    "multer": "2.0.2",
+    "openai": "6.9.0",
+    "unpdf": "1.4.0",
+    "zod": "4.1.12"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.56.1",
+    "@types/compression": "1.8.1",
+    "@types/cors": "2.8.19",
+    "@types/express": "4.17.23",
+    "@types/jsonwebtoken": "9.0.10",
+    "@types/multer": "2.0.0",
+    "@types/node": "22.18.9",
+    "@types/supertest": "6.0.3",
+    "@vitest/coverage-v8": "3.2.4",
+    "supertest": "7.1.4",
+    "tsx": "4.20.6",
+    "typescript": "5.9.3",
+    "vitest": "3.2.4"
+  }
+}

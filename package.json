@@ -1,0 +1,39 @@
+{
+  "name": "sourceiq",
+  "version": "1.0.0",
+  "private": true,
+  "description": "SourceIQ - MERN RAG app: upload PDFs, ask questions, get cited answers powered by a local BAAI/bge-small-en-v1.5 embedding model.",
+  "type": "module",
+  "engines": {
+    "node": ">=20.11.0"
+  },
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "install:all": "npm install",
+    "postinstall": "node scripts/postinstall.mjs",
+    "dev": "run-p dev:server dev:client",
+    "dev:server": "npm run dev --workspace server",
+    "dev:client": "npm run dev --workspace client",
+    "verify:restart": "bash scripts/verify-restart.sh",
+    "model:download": "npm run model:download --workspace server",
+    "model:verify": "npm run model:verify --workspace server",
+    "model:info": "npm run model:info --workspace server",
+    "atlas:index": "npm run atlas:index --workspace server",
+    "build": "npm run build --workspace client && npm run build --workspace server",
+    "build:client": "npm run build --workspace client",
+    "build:server": "npm run build --workspace server",
+    "start": "npm run start --workspace server",
+    "typecheck": "npm run typecheck --workspace server && npm run typecheck --workspace client",
+    "test": "npm run test --workspace server",
+    "test:watch": "npm run test:watch --workspace server",
+    "test:ui": "npm run test:ui --workspace server",
+    "test:e2e": "npm run test:e2e --workspace server",
+    "test:all": "npm run typecheck && npm run test --workspace server && npm run test:e2e"
+  },
+  "devDependencies": {
+    "npm-run-all": "^4.1.5"
+  }
+}

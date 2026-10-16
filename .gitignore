@@ -1,0 +1,63 @@
+# ---------------------------------------------------------------------------
+# Dependencies (project-local only - nothing is installed globally)
+# ---------------------------------------------------------------------------
+node_modules/
+.npm/
+.npmrc.local
+
+# ---------------------------------------------------------------------------
+# Build output
+# ---------------------------------------------------------------------------
+dist/
+build/
+*.tsbuildinfo
+
+# ---------------------------------------------------------------------------
+# Secrets - never commit real credentials
+# ---------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+
+# ---------------------------------------------------------------------------
+# Hugging Face model artifacts + caches
+# SourceIQ runs BAAI/bge-small-en-v1.5 locally. The weights are ~133 MB and
+# are re-downloadable via `npm run model:download`, so they stay out of Git.
+# ---------------------------------------------------------------------------
+server/models/
+server/.cache/
+.cache/
+huggingface/
+*.onnx
+tokenizer.json
+
+# ---------------------------------------------------------------------------
+# Test / runtime artifacts
+# ---------------------------------------------------------------------------
+coverage/
+.nyc_output/
+playwright-report/
+test-results/
+blob-report/
+.playwright/
+screenshots/
+*.log
+npm-debug.log*
+logs/
+
+# ---------------------------------------------------------------------------
+# Uploaded documents (runtime storage, not source)
+# ---------------------------------------------------------------------------
+server/uploads/
+uploads/
+
+# ---------------------------------------------------------------------------
+# OS / editor noise
+# ---------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/launch.json
