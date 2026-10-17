@@ -56,11 +56,11 @@ export const RESEARCH_PDF_LINES = [
  * navigation is always scoped to the nav bar rather than matched by accessible
  * name alone. The public chat has no nav bar at all.
  */
-export function navLink(page: Page, name: 'Dashboard' | 'Documents' | 'Chat') {
+export function navLink(page: Page, name: 'Dashboard' | 'Documents' | 'Queries' | 'Chat') {
   return page.locator('.app-nav').getByRole('link', { name, exact: true });
 }
 
-export async function goTo(page: Page, name: 'Dashboard' | 'Documents' | 'Chat'): Promise<void> {
+export async function goTo(page: Page, name: 'Dashboard' | 'Documents' | 'Queries' | 'Chat'): Promise<void> {
   await navLink(page, name).click();
 }
 

@@ -25,5 +25,11 @@
     "types": ["node"]
   },
   "include": ["src/**/*.ts", "tests/**/*.ts", "scripts/**/*.ts", "*.config.ts"],
-  "exclude": ["node_modules", "dist"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    // Browser e2e tooling only: the config imports @playwright/test, which is
+    // intentionally not installed, so it must not block `npm run typecheck`.
+    "playwright.config.ts"
+  ]
 }

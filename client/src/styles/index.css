@@ -323,6 +323,7 @@ select {
 .badge-pending,
 .badge-processing { color: var(--warning); border-color: color-mix(in srgb, var(--warning) 35%, transparent); background: color-mix(in srgb, var(--warning) 12%, transparent); }
 .badge-edited { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 35%, transparent); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.badge-indexed { color: var(--success); border-color: color-mix(in srgb, var(--success) 35%, transparent); background: color-mix(in srgb, var(--success) 12%, transparent); }
 
 /* --------------------------------------------------------------- alerts -- */
 .alert {

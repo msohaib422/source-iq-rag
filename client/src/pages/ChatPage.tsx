@@ -76,6 +76,17 @@ export function ChatPage() {
   const [streamingAnswer, setStreamingAnswer] = useState('');
   const [streamCitations, setStreamCitations] = useState<Citation[]>([]);
   const [sending, setSending] = useState(false);
+  /**
+   * True until the answer has been committed to `messages` (or the stream
+   * failed). `sending` stays true a little longer than this: after the `done`
+   * frame the server may still be finishing bookkeeping - on an unanswered
+   * question it records the query before closing the stream - so the response
+   * is still open while the answer is already on screen. The streaming bubble
+   * must disappear when the answer lands, not when the socket closes,
+   * otherwise its empty branch re-renders as a "Searching your documents…"
+   * spinner underneath the finished answer.
+   */
+  const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [activeCitationIndex, setActiveCitationIndex] = useState<number | null>(null);
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
@@ -106,6 +117,7 @@ export function ChatPage() {
 
       setError(null);
       setSending(true);
+      setStreaming(true);
       setStreamingAnswer('');
       setStreamCitations([]);
       setActiveCitationIndex(null);
@@ -154,8 +166,14 @@ export function ChatPage() {
               ]);
               setStreamingAnswer('');
               setStreamCitations([]);
+              // The answer is in `messages`: stop showing the streaming bubble
+              // now, rather than waiting for the response to close.
+              setStreaming(false);
             },
-            onError: (payload) => setError(payload.message),
+            onError: (payload) => {
+              setStreaming(false);
+              setError(payload.message);
+            },
           },
           controller.signal,
         );
@@ -164,6 +182,8 @@ export function ChatPage() {
           setError(err instanceof ApiError ? err.message : 'The request failed.');
         }
       } finally {
+        // Covers the aborted case, where no done frame ever arrives.
+        setStreaming(false);
         setSending(false);
         abortRef.current = null;
       }
@@ -306,7 +326,7 @@ export function ChatPage() {
             </div>
           ))}
 
-          {sending ? (
+          {streaming ? (
             <div className="msg msg-assistant" data-testid="message-streaming">
               <div className="msg-avatar" aria-hidden="true">
                 AI
@@ -315,7 +335,16 @@ export function ChatPage() {
                 <div className="msg-role">SourceIQ</div>
                 {streamingAnswer ? (
                   <>
-                    <div className="msg-content">{streamingAnswer}</div>
+                    {/* Streamed text is rendered by the same component as the
+                        finished answer. A plain-text preview here was discarded
+                        and re-rendered as markdown when the stream completed,
+                        which changed the answer's layout (paragraph margins,
+                        citation chips) after it had appeared, while the
+                        auto-scroll animation was still chasing the old height. */}
+                    <AnswerBody
+                      content={streamingAnswer}
+                      onCite={(index) => setActiveCitationIndex(index)}
+                    />
                     <CitationList citations={streamCitations} showDiagnostics={isAdmin} />
                   </>
                 ) : (

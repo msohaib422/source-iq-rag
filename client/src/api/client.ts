@@ -14,6 +14,9 @@ import type {
   DocumentStatus,
   HealthInfo,
   IngestionResult,
+  QueriesResponse,
+  QueryRecord,
+  QueryStatus,
   ReadinessInfo,
   SourceDocument,
   User,
@@ -168,6 +171,19 @@ export const api = {
     request<{ chunk: Chunk }>(`/api/chunks/${id}`, { method: 'PATCH', body: { text } }),
   deleteChunk: (id: string) =>
     request<{ deleted: boolean; documentChunkCount: number }>(`/api/chunks/${id}`, { method: 'DELETE' }),
+
+  // ---- queries (Queries Management, admin only) ----
+  // Unanswered chat questions collected by the RAG pipeline. Marking a record
+  // indexed only changes its status; it never touches the knowledge base.
+  listQueries: (params: { status?: QueryStatus } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.status) qs.set('status', params.status);
+    const suffix = qs.toString() ? `?${qs}` : '';
+    return request<QueriesResponse>(`/api/queries${suffix}`);
+  },
+  markQueryIndexed: (id: string) =>
+    request<{ query: QueryRecord }>(`/api/queries/${id}/indexed`, { method: 'POST' }),
+  deleteQuery: (id: string) => request<void>(`/api/queries/${id}`, { method: 'DELETE' }),
 
   // ---- chat ----
   // Chat is stateless: answers are produced from the documents and nothing is

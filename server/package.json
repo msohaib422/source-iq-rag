@@ -24,8 +24,8 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "@huggingface/transformers": "3.7.6",
     "@google/genai": "1.30.0",
+    "@huggingface/transformers": "3.7.6",
     "bcryptjs": "3.0.2",
     "compression": "1.8.1",
     "cors": "2.8.5",
@@ -40,7 +40,6 @@
     "zod": "4.1.12"
   },
   "devDependencies": {
-    "@playwright/test": "1.56.1",
     "@types/compression": "1.8.1",
     "@types/cors": "2.8.19",
     "@types/express": "4.17.23",

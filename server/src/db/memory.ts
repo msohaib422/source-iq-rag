@@ -13,6 +13,8 @@ import { randomUUID } from 'node:crypto';
 import type {
   ChunkRecord,
   DocumentRecord,
+  QueryRecord,
+  QueryRecordStatus,
   ScoredChunk,
   StoreStats,
   UserRecord,
@@ -22,9 +24,11 @@ import type {
 import type {
   CreateChunkInput,
   CreateDocumentInput,
+  CreateUnansweredQueryInput,
   CreateUserInput,
   ListChunksOptions,
   ListDocumentsOptions,
+  ListUnansweredQueriesOptions,
   Store,
 } from './store.js';
 import { cosineSimilarity } from '../services/embeddings.js';
@@ -33,6 +37,7 @@ interface Collections {
   users: Map<string, UserRecord>;
   documents: Map<string, DocumentRecord>;
   chunks: Map<string, ChunkRecord>;
+  queries: Map<string, QueryRecord>;
 }
 
 function emptyCollections(): Collections {
@@ -40,6 +45,7 @@ function emptyCollections(): Collections {
     users: new Map(),
     documents: new Map(),
     chunks: new Map(),
+    queries: new Map(),
   };
 }
 
@@ -277,6 +283,69 @@ export class MemoryStore implements Store {
     scored.sort((a, b) => b.score - a.score);
     const limited = scored.slice(0, params.limit);
     return params.minScore === undefined ? limited : limited.filter((s) => s.score >= params.minScore!);
+  }
+
+  // ---- unanswered queries ----
+
+  async createUnansweredQuery(input: CreateUnansweredQueryInput): Promise<QueryRecord> {
+    const now = new Date();
+    const record: QueryRecord = {
+      id: randomUUID(),
+      userId: input.userId,
+      question: input.question,
+      editedQuestion: null,
+      status: 'pending',
+      createdAt: now,
+      updatedAt: now,
+    };
+    this.db.queries.set(record.id, record);
+    return { ...record };
+  }
+
+  async listUnansweredQueries(
+    userId: string,
+    options: ListUnansweredQueriesOptions = {},
+  ): Promise<QueryRecord[]> {
+    return [...this.db.queries.values()]
+      .filter((q) => q.userId === userId)
+      .filter((q) => (options.status ? q.status === options.status : true))
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
+      .map((q) => ({ ...q }));
+  }
+
+  async getUnansweredQuery(id: string, userId: string): Promise<QueryRecord | null> {
+    const record = this.db.queries.get(id);
+    if (!record || record.userId !== userId) return null;
+    return { ...record };
+  }
+
+  async updateUnansweredQuery(
+    id: string,
+    userId: string,
+    patch: Partial<Pick<QueryRecord, 'status'>>,
+  ): Promise<QueryRecord | null> {
+    const record = this.db.queries.get(id);
+    if (!record || record.userId !== userId) return null;
+    if (patch.status !== undefined) record.status = patch.status;
+    record.updatedAt = new Date();
+    return { ...record };
+  }
+
+  async deleteUnansweredQuery(id: string, userId: string): Promise<boolean> {
+    const record = this.db.queries.get(id);
+    if (!record || record.userId !== userId) return false;
+    this.db.queries.delete(id);
+    return true;
+  }
+
+  async countUnansweredQueries(userId: string, status?: QueryRecordStatus): Promise<number> {
+    let count = 0;
+    for (const record of this.db.queries.values()) {
+      if (record.userId !== userId) continue;
+      if (status && record.status !== status) continue;
+      count += 1;
+    }
+    return count;
   }
 
   async stats(): Promise<StoreStats> {
