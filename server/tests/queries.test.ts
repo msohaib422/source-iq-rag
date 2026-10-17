@@ -4,7 +4,8 @@
  * Recording rules: a *knowledge* question whose completed answer carries no
  * citation (the pipeline found no chunk that supports it) is recorded with its
  * exact text. Small talk, unclear messages, answerable questions and technical
- * failures are never recorded. Management is admin-only: list, edit, delete.
+ * failures are never recorded. Management is admin-only: list, mark indexed,
+ * delete.
  */
 import request from 'supertest';
 import { describe, expect, it } from 'vitest';
@@ -31,6 +32,10 @@ async function listQueries(params: { status?: string } = {}): Promise<request.Re
   return request(h.app).get(`/api/queries${suffix}`).set(auth(h.token)).expect(200);
 }
 
+async function markIndexed(id: string, token = h.token): Promise<request.Response> {
+  return request(h.app).post(`/api/queries/${id}/indexed`).set(auth(token)).expect(200);
+}
+
 async function streamAsk(question: string): Promise<request.Response> {
   return request(h.app)
     .post('/api/chat/stream')
@@ -54,7 +59,7 @@ describe('recording unanswered queries', () => {
     expect(res.body.citations).toEqual([]);
 
     const { body } = await listQueries();
-    expect(body.counts).toEqual({ pending: 1, edited: 0, total: 1 });
+    expect(body.counts).toEqual({ pending: 1, indexed: 0, total: 1 });
     expect(body.queries).toHaveLength(1);
     const record = body.queries[0] as QueryRecord;
     expect(record.question).toBe(question);
@@ -163,7 +168,7 @@ describe('authorization', () => {
     h = await createHarness({ withUser: true });
 
     await request(h.app).get('/api/queries').expect(401);
-    await request(h.app).patch('/api/queries/abc').send({ question: 'x' }).expect(401);
+    await request(h.app).post('/api/queries/abc/indexed').expect(401);
     await request(h.app).delete('/api/queries/abc').expect(401);
   });
 
@@ -173,7 +178,7 @@ describe('authorization', () => {
     const userToken = signToken({ sub: user.id, email: user.email, name: user.name });
 
     await request(h.app).get('/api/queries').set(auth(userToken)).expect(401);
-    await request(h.app).patch('/api/queries/abc').set(auth(userToken)).send({ question: 'x' }).expect(401);
+    await request(h.app).post('/api/queries/abc/indexed').set(auth(userToken)).expect(401);
     await request(h.app).delete('/api/queries/abc').set(auth(userToken)).expect(401);
   });
 });
@@ -189,86 +194,54 @@ describe('listing', () => {
     ) as QueryRecord;
     expect(worldCup).toBeTruthy();
 
-    const editedRes = await request(h.app)
-      .patch(`/api/queries/${worldCup.id}`)
-      .set(auth(h.token))
-      .send({ question: 'Which country won the 1966 FIFA World Cup?' })
-      .expect(200);
-    expect(editedRes.body.query.status).toBe('edited');
+    const indexedRes = await markIndexed(worldCup.id);
+    expect(indexedRes.body.query.status).toBe('indexed');
 
     const pending = await listQueries({ status: 'pending' });
     expect(pending.body.queries).toHaveLength(1);
     expect((pending.body.queries[0] as QueryRecord).question).toBe('What is the tuition fee for Oxford University?');
-    expect(pending.body.counts).toEqual({ pending: 1, edited: 1, total: 2 });
+    expect(pending.body.counts).toEqual({ pending: 1, indexed: 1, total: 2 });
 
-    const edited = await listQueries({ status: 'edited' });
-    expect(edited.body.queries).toHaveLength(1);
-    expect((edited.body.queries[0] as QueryRecord).editedQuestion).toBe(
-      'Which country won the 1966 FIFA World Cup?',
-    );
+    const indexed = await listQueries({ status: 'indexed' });
+    expect(indexed.body.queries).toHaveLength(1);
+    expect((indexed.body.queries[0] as QueryRecord).id).toBe(worldCup.id);
   });
 });
 
-describe('editing', () => {
-  it('moves a pending record to Edited while preserving the original submission', async () => {
+describe('marking indexed', () => {
+  it('moves a pending record to Indexed while preserving the original submission', async () => {
     h = await createHarness({ withUser: true });
     const question = 'What is the tuition fee for Oxford University?';
     await ask(question, h.token).expect(200);
     const id = (await listQueries()).body.queries[0].id as string;
 
-    const edited = await request(h.app)
-      .patch(`/api/queries/${id}`)
-      .set(auth(h.token))
-      .send({ question: 'What is the tuition fee for international students at Oxford University?' })
-      .expect(200)
-      .then((res) => res.body.query as QueryRecord);
+    const indexed = await markIndexed(id).then((res) => res.body.query as QueryRecord);
 
-    expect(edited.editedQuestion).toBe('What is the tuition fee for international students at Oxford University?');
-    expect(edited.question).toBe(question);
-    expect(edited.status).toBe('edited');
-    expect(new Date(edited.updatedAt).getTime()).toBeGreaterThanOrEqual(new Date(edited.createdAt).getTime());
+    expect(indexed.status).toBe('indexed');
+    expect(indexed.question).toBe(question);
+    expect(indexed.editedQuestion).toBeNull();
+    expect(new Date(indexed.updatedAt).getTime()).toBeGreaterThanOrEqual(new Date(indexed.createdAt).getTime());
 
-    // The record reloads from the store as edited (survives a page refresh).
-    const { body } = await listQueries({ status: 'edited' });
+    // The record reloads from the store as indexed (survives a page refresh).
+    const { body } = await listQueries({ status: 'indexed' });
     expect((body.queries[0] as QueryRecord).id).toBe(id);
-    expect((body.queries[0] as QueryRecord).status).toBe('edited');
+    expect((body.queries[0] as QueryRecord).status).toBe('indexed');
     expect((body.queries[0] as QueryRecord).question).toBe(question);
-    expect(body.counts).toEqual({ pending: 0, edited: 1, total: 1 });
+    expect(body.counts).toEqual({ pending: 0, indexed: 1, total: 1 });
   });
 
-  it('allows editing an already-edited record without losing the original', async () => {
+  it('is idempotent: indexing an already-indexed record changes nothing but the timestamp', async () => {
     h = await createHarness({ withUser: true });
     await ask('What is the tuition fee for Oxford University?', h.token).expect(200);
     const id = (await listQueries()).body.queries[0].id as string;
 
-    await request(h.app)
-      .patch(`/api/queries/${id}`)
-      .set(auth(h.token))
-      .send({ question: 'first phrasing' })
-      .expect(200);
-    const twice = await request(h.app)
-      .patch(`/api/queries/${id}`)
-      .set(auth(h.token))
-      .send({ question: 'second phrasing' })
-      .expect(200)
-      .then((res) => res.body.query as QueryRecord);
+    await markIndexed(id);
+    const twice = await markIndexed(id).then((res) => res.body.query as QueryRecord);
 
-    expect(twice.editedQuestion).toBe('second phrasing');
+    expect(twice.status).toBe('indexed');
     expect(twice.question).toBe('What is the tuition fee for Oxford University?');
-  });
-
-  it('rejects an empty edit', async () => {
-    h = await createHarness({ withUser: true });
-    await ask('What is the tuition fee for Oxford University?', h.token).expect(200);
-    const id = (await listQueries()).body.queries[0].id as string;
-
-    await request(h.app).patch(`/api/queries/${id}`).set(auth(h.token)).send({ question: '' }).expect(422);
-    await request(h.app).patch(`/api/queries/${id}`).set(auth(h.token)).send({ question: '   ' }).expect(422);
-
-    // The record is untouched and still pending.
     const { body } = await listQueries();
-    expect((body.queries[0] as QueryRecord).status).toBe('pending');
-    expect(body.counts.pending).toBe(1);
+    expect(body.counts).toEqual({ pending: 0, indexed: 1, total: 1 });
   });
 
   it('returns 404 for unknown or other-workspace records', async () => {
@@ -282,8 +255,8 @@ describe('editing', () => {
     const foreignId = (await request(other.app).get('/api/queries').set(auth(other.token)).expect(200))
       .body.queries[0].id as string;
 
-    await request(h.app).patch('/api/queries/507f1f77bcf86cd799439011').set(auth(h.token)).send({ question: 'x' }).expect(404);
-    await request(h.app).patch(`/api/queries/${foreignId}`).set(auth(h.token)).send({ question: 'x' }).expect(404);
+    await request(h.app).post('/api/queries/507f1f77bcf86cd799439011/indexed').set(auth(h.token)).expect(404);
+    await request(h.app).post(`/api/queries/${foreignId}/indexed`).set(auth(h.token)).expect(404);
     h = other;
   });
 });
@@ -314,7 +287,7 @@ describe('deletion', () => {
 });
 
 describe('knowledge base isolation and dashboard counter', () => {
-  it('editing or deleting a query never touches documents, chunks or embeddings', async () => {
+  it('indexing or deleting a query never touches documents, chunks or embeddings', async () => {
     h = await createHarness({ withUser: true });
     await uploadPdf(h.app, h.token, ARAL_LINES, 'aral-sea.pdf');
     await ask('What is the tuition fee for Oxford University?', h.token).expect(200);
@@ -328,17 +301,13 @@ describe('knowledge base isolation and dashboard counter', () => {
     const chunksBefore = before.chunks;
 
     const id = (await listQueries()).body.queries[0].id as string;
-    await request(h.app)
-      .patch(`/api/queries/${id}`)
-      .set(auth(h.token))
-      .send({ question: 'What does Oxford cost?' })
-      .expect(200);
+    await markIndexed(id);
 
-    const afterEdit = await stats();
-    expect(afterEdit.documents).toBe(1);
-    expect(afterEdit.chunks).toBe(chunksBefore);
+    const afterIndexing = await stats();
+    expect(afterIndexing.documents).toBe(1);
+    expect(afterIndexing.chunks).toBe(chunksBefore);
     // The record left Pending, so the dashboard card drops to zero.
-    expect(afterEdit.queries).toBe(0);
+    expect(afterIndexing.queries).toBe(0);
 
     await request(h.app).delete(`/api/queries/${id}`).set(auth(h.token)).expect(204);
     const afterDelete = await stats();
@@ -347,6 +316,6 @@ describe('knowledge base isolation and dashboard counter', () => {
     expect(afterDelete.queries).toBe(0);
 
     const totals = (await listQueries()).body.counts;
-    expect(totals).toEqual({ pending: 0, edited: 0, total: 0 });
+    expect(totals).toEqual({ pending: 0, indexed: 0, total: 0 });
   });
 });

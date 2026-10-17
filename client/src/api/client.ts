@@ -173,16 +173,16 @@ export const api = {
     request<{ deleted: boolean; documentChunkCount: number }>(`/api/chunks/${id}`, { method: 'DELETE' }),
 
   // ---- queries (Queries Management, admin only) ----
-  // Unanswered chat questions collected by the RAG pipeline. Editing a record
-  // never touches the knowledge base; it only renames the stored query.
+  // Unanswered chat questions collected by the RAG pipeline. Marking a record
+  // indexed only changes its status; it never touches the knowledge base.
   listQueries: (params: { status?: QueryStatus } = {}) => {
     const qs = new URLSearchParams();
     if (params.status) qs.set('status', params.status);
     const suffix = qs.toString() ? `?${qs}` : '';
     return request<QueriesResponse>(`/api/queries${suffix}`);
   },
-  updateQuery: (id: string, question: string) =>
-    request<{ query: QueryRecord }>(`/api/queries/${id}`, { method: 'PATCH', body: { question } }),
+  markQueryIndexed: (id: string) =>
+    request<{ query: QueryRecord }>(`/api/queries/${id}/indexed`, { method: 'POST' }),
   deleteQuery: (id: string) => request<void>(`/api/queries/${id}`, { method: 'DELETE' }),
 
   // ---- chat ----

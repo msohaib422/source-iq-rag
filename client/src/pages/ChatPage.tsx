@@ -315,7 +315,16 @@ export function ChatPage() {
                 <div className="msg-role">SourceIQ</div>
                 {streamingAnswer ? (
                   <>
-                    <div className="msg-content">{streamingAnswer}</div>
+                    {/* Streamed text is rendered by the same component as the
+                        finished answer. A plain-text preview here was discarded
+                        and re-rendered as markdown when the stream completed,
+                        which changed the answer's layout (paragraph margins,
+                        citation chips) after it had appeared, while the
+                        auto-scroll animation was still chasing the old height. */}
+                    <AnswerBody
+                      content={streamingAnswer}
+                      onCite={(index) => setActiveCitationIndex(index)}
+                    />
                     <CitationList citations={streamCitations} showDiagnostics={isAdmin} />
                   </>
                 ) : (

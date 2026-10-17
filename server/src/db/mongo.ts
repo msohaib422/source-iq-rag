@@ -102,8 +102,12 @@ const querySchema = new Schema(
     userId: { type: Schema.Types.ObjectId, required: true, index: true, ref: 'User' },
     // The user's question exactly as submitted; never rewritten by the system.
     question: { type: String, required: true, trim: true },
+    // Legacy field from the removed edit workflow; existing documents keep it,
+    // nothing writes it anymore.
     editedQuestion: { type: String, default: null },
-    status: { type: String, enum: ['pending', 'edited'], default: 'pending', index: true },
+    // `edited` is the pre-indexing legacy status, accepted so older documents
+    // remain writable; init() migrates them to `indexed`.
+    status: { type: String, enum: ['pending', 'indexed', 'edited'], default: 'pending', index: true },
   },
   { timestamps: true, collection: 'unanswered_queries' },
 );
@@ -167,6 +171,7 @@ function mapQuery(raw: Doc): QueryRecord {
     id: toId(raw._id),
     userId: toId(raw.userId),
     question: String(raw.question),
+    // Kept as stored so legacy records never lose data; new records are null.
     editedQuestion: (raw.editedQuestion as string | null) ?? null,
     status: (raw.status as QueryRecord['status']) ?? 'pending',
     createdAt: (raw.createdAt as Date) ?? new Date(),
@@ -232,6 +237,25 @@ export class MongoStore implements Store {
       this.Chunk.syncIndexes() as unknown as Promise<unknown>,
       this.Query.syncIndexes() as unknown as Promise<unknown>,
     ]);
+    await this.migrateLegacyEditedQueries();
+  }
+
+  /**
+   * One-time status transition for records written by the removed edit
+   * workflow: legacy `edited` records become `indexed` so they stay available
+   * in the Queries page's Indexed section. Only the status field moves - the
+   * original question text and every other field are left untouched.
+   */
+  private async migrateLegacyEditedQueries(): Promise<void> {
+    try {
+      const res = await this.Query.updateMany({ status: 'edited' }, { $set: { status: 'indexed' } });
+      if (res.modifiedCount > 0) {
+        console.log(`  i migrated ${res.modifiedCount} legacy edited quer${res.modifiedCount === 1 ? 'y' : 'ies'} to indexed.`);
+      }
+    } catch (err) {
+      // Never fatal: the records stay as stored and a later boot retries.
+      console.warn(`  ! legacy query status migration failed: ${(err as Error).message}`);
+    }
   }
 
   async close(): Promise<void> {
@@ -481,11 +505,10 @@ export class MongoStore implements Store {
   async updateUnansweredQuery(
     id: string,
     userId: string,
-    patch: Partial<Pick<QueryRecord, 'editedQuestion' | 'status'>>,
+    patch: Partial<Pick<QueryRecord, 'status'>>,
   ): Promise<QueryRecord | null> {
     if (!mongoose.isValidObjectId(id)) return null;
     const allowed: Record<string, unknown> = {};
-    if (patch.editedQuestion !== undefined) allowed.editedQuestion = patch.editedQuestion;
     if (patch.status !== undefined) allowed.status = patch.status;
     const doc = await this.Query.findOneAndUpdate(
       { _id: objectId(id), userId: objectId(userId) },

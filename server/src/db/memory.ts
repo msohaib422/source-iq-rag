@@ -322,11 +322,10 @@ export class MemoryStore implements Store {
   async updateUnansweredQuery(
     id: string,
     userId: string,
-    patch: Partial<Pick<QueryRecord, 'editedQuestion' | 'status'>>,
+    patch: Partial<Pick<QueryRecord, 'status'>>,
   ): Promise<QueryRecord | null> {
     const record = this.db.queries.get(id);
     if (!record || record.userId !== userId) return null;
-    if (patch.editedQuestion !== undefined) record.editedQuestion = patch.editedQuestion;
     if (patch.status !== undefined) record.status = patch.status;
     record.updatedAt = new Date();
     return { ...record };

@@ -62,9 +62,9 @@ test.describe('authentication and access control', () => {
     expect((await page.request.patch(`/api/chunks/${missing}`, { data: { text: 'x' } })).status()).toBe(401);
     expect((await page.request.delete(`/api/chunks/${missing}`)).status()).toBe(401);
 
-    // Queries Management is admin-only too: no list, edit or delete for visitors.
+    // Queries Management is admin-only too: no list, indexing or delete for visitors.
     expect((await page.request.get('/api/queries')).status()).toBe(401);
-    expect((await page.request.patch(`/api/queries/${missing}`, { data: { question: 'x' } })).status()).toBe(401);
+    expect((await page.request.post(`/api/queries/${missing}/indexed`)).status()).toBe(401);
     expect((await page.request.delete(`/api/queries/${missing}`)).status()).toBe(401);
   });
 

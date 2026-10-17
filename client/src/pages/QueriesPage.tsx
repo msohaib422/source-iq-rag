@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { api, ApiError } from '../api/client';
 import type { QueryRecord } from '../api/types';
 import { Alert } from '../components/Alert';
-import { ConfirmDialog, Modal } from '../components/Modal';
+import { ConfirmDialog } from '../components/Modal';
 import { Spinner } from '../components/Spinner';
 import { useAsync } from '../hooks';
 
@@ -10,50 +10,37 @@ import { useAsync } from '../hooks';
  * Queries Management.
  *
  * Questions the RAG pipeline could not answer (their answer carried no
- * citation) are collected here, split into Pending and Edited. Editing only
- * renames the stored record - it never adds the query to the knowledge base.
+ * citation) are collected here, split into Pending and Indexed. Marking a
+ * query indexed only records that status - it never adds the query to the
+ * knowledge base. The original text is immutable.
  */
 export function QueriesPage() {
   const queries = useAsync(() => api.listQueries(), []);
   const [notice, setNotice] = useState<{ tone: 'success' | 'error'; text: string } | null>(null);
 
-  const [editing, setEditing] = useState<QueryRecord | null>(null);
-  const [draft, setDraft] = useState('');
-  const [draftError, setDraftError] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-
+  const [indexingId, setIndexingId] = useState<string | null>(null);
   const [pendingDelete, setPendingDelete] = useState<QueryRecord | null>(null);
   const [deleting, setDeleting] = useState(false);
 
   const list = queries.data?.queries ?? [];
   const pending = list.filter((q) => q.status === 'pending');
-  const edited = list.filter((q) => q.status === 'edited');
+  const indexed = list.filter((q) => q.status === 'indexed');
   const counts = queries.data?.counts;
 
-  function openEditor(query: QueryRecord) {
-    setEditing(query);
-    setDraft(query.editedQuestion ?? query.question);
-    setDraftError(null);
-  }
-
-  async function saveEdit() {
-    if (!editing) return;
-    const text = draft.trim();
-    if (!text) {
-      setDraftError('Query cannot be empty.');
-      return;
-    }
-    setSaving(true);
-    setDraftError(null);
+  async function markIndexed(query: QueryRecord) {
+    if (indexingId) return;
+    setIndexingId(query.id);
     try {
-      await api.updateQuery(editing.id, text);
-      setEditing(null);
-      setNotice({ tone: 'success', text: 'Query updated and moved to Edited.' });
+      await api.markQueryIndexed(query.id);
+      setNotice({ tone: 'success', text: 'Query marked as indexed.' });
+      // Reload both sections and their counts; the row leaves Pending only
+      // once the server has confirmed the status change.
       await queries.refetch(true);
     } catch (err) {
-      setDraftError(err instanceof ApiError ? err.message : 'Could not save the query.');
+      // The row stays in Pending; the failure is surfaced instead.
+      setNotice({ tone: 'error', text: err instanceof ApiError ? err.message : 'Could not mark the query as indexed.' });
     } finally {
-      setSaving(false);
+      setIndexingId(null);
     }
   }
 
@@ -80,8 +67,8 @@ export function QueriesPage() {
         <div>
           <h1>Queries</h1>
           <p className="subtitle">
-            Chat questions the assistant could not answer from the indexed documents. Edit them into
-            better phrasings or discard them.
+            Chat questions the assistant could not answer from the indexed documents. Mark them as
+            indexed once handled, or discard them.
           </p>
         </div>
       </div>
@@ -119,7 +106,8 @@ export function QueriesPage() {
                   <QueryRow
                     key={query.id}
                     query={query}
-                    onEdit={openEditor}
+                    busy={indexingId === query.id}
+                    onIndexed={markIndexed}
                     onDelete={setPendingDelete}
                   />
                 ))}
@@ -129,91 +117,25 @@ export function QueriesPage() {
 
           <div className="card">
             <div className="row" style={{ justifyContent: 'space-between', marginBottom: '0.85rem' }}>
-              <h2>Edited</h2>
-              <span className="badge badge-edited" data-testid="edited-count">
-                {counts?.edited ?? edited.length}
+              <h2>Indexed</h2>
+              <span className="badge badge-indexed" data-testid="indexed-count">
+                {counts?.indexed ?? indexed.length}
               </span>
             </div>
-            {edited.length === 0 ? (
+            {indexed.length === 0 ? (
               <div className="center-state">
-                <p>No edited queries yet.</p>
+                <p>No indexed queries yet.</p>
               </div>
             ) : (
               <div className="doc-list" data-testid="query-list">
-                {edited.map((query) => (
-                  <QueryRow
-                    key={query.id}
-                    query={query}
-                    onEdit={openEditor}
-                    onDelete={setPendingDelete}
-                  />
+                {indexed.map((query) => (
+                  <QueryRow key={query.id} query={query} busy={false} onDelete={setPendingDelete} />
                 ))}
               </div>
             )}
           </div>
         </>
       )}
-
-      <Modal
-        open={editing !== null}
-        title="Edit query"
-        onClose={() => (saving ? undefined : setEditing(null))}
-        footer={
-          <>
-            <button type="button" className="btn" onClick={() => setEditing(null)} disabled={saving}>
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="btn btn-primary"
-              onClick={() => void saveEdit()}
-              disabled={saving}
-              data-testid="query-save"
-            >
-              {saving ? <span className="spinner" /> : null}
-              Save
-            </button>
-          </>
-        }
-      >
-        {editing ? (
-          <>
-            <div className="field">
-              <label htmlFor="query-editor">Query</label>
-              <textarea
-                id="query-editor"
-                className="textarea"
-                value={draft}
-                onChange={(e) => {
-                  setDraft(e.target.value);
-                  if (draftError) setDraftError(null);
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault();
-                    void saveEdit();
-                  }
-                }}
-                rows={3}
-                disabled={saving}
-                data-testid="query-editor"
-              />
-              {draftError ? (
-                <p className="field-error" role="alert">
-                  {draftError}
-                </p>
-              ) : (
-                <p className="field-hint">
-                  Only this record is updated — the knowledge base is not changed.
-                </p>
-              )}
-            </div>
-            {editing.editedQuestion === null || editing.editedQuestion !== editing.question ? (
-              <p className="small faint">Originally asked: “{editing.question}”</p>
-            ) : null}
-          </>
-        ) : null}
-      </Modal>
 
       <ConfirmDialog
         open={pendingDelete !== null}
@@ -229,37 +151,46 @@ export function QueriesPage() {
 
 function QueryRow({
   query,
-  onEdit,
+  busy,
+  onIndexed,
   onDelete,
 }: {
   query: QueryRecord;
-  onEdit: (query: QueryRecord) => void;
+  busy: boolean;
+  onIndexed?: (query: QueryRecord) => void;
   onDelete: (query: QueryRecord) => void;
 }) {
-  const current = query.editedQuestion ?? query.question;
-  const showOriginal = query.editedQuestion !== null && query.editedQuestion !== query.question;
   return (
     <div className="doc-row" data-testid="query-row">
       <span className="doc-icon" aria-hidden="true">
         Q
       </span>
       <span className="doc-info">
-        <span className="doc-title" style={{ whiteSpace: 'normal' }} title={current}>
-          {current}
+        <span className="doc-title" style={{ whiteSpace: 'normal' }} title={query.question}>
+          {query.question}
         </span>
-        {showOriginal ? <span className="doc-meta">Originally asked: “{query.question}”</span> : null}
         <span className="doc-meta">
           <span>Submitted {new Date(query.createdAt).toLocaleString()}</span>
-          {query.status === 'edited' ? <span>Edited {new Date(query.updatedAt).toLocaleString()}</span> : null}
+          {query.status === 'indexed' ? <span>Indexed {new Date(query.updatedAt).toLocaleString()}</span> : null}
         </span>
       </span>
-      <span className={`badge badge-${query.status}`}>
-        {query.status === 'edited' ? 'Edited' : 'Pending'}
-      </span>
+      {/* The section heading already says "Pending", so only the Indexed state
+          is flagged on the row itself. */}
+      {query.status === 'indexed' ? <span className="badge badge-indexed">Indexed</span> : null}
       <span className="doc-actions">
-        <button type="button" className="btn btn-sm" onClick={() => onEdit(query)} data-testid="query-edit">
-          Edit
-        </button>
+        {query.status === 'pending' && onIndexed ? (
+          <button
+            type="button"
+            className="btn btn-sm"
+            onClick={() => void onIndexed(query)}
+            disabled={busy}
+            aria-label="Mark query as indexed"
+            data-testid="query-indexed"
+          >
+            {busy ? <span className="spinner" /> : null}
+            Indexed
+          </button>
+        ) : null}
         <button
           type="button"
           className="btn btn-sm btn-danger"

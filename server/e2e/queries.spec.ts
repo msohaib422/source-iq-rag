@@ -3,16 +3,16 @@
  *
  * The full feature flow: the dashboard Queries card counts unanswered chat
  * questions and opens the management page; answerable questions are never
- * recorded while unanswerable ones land in Pending; editing moves a record to
- * Edited (persisted across reloads) and deleting removes exactly that record;
- * the Queries navigation item works and the navigation stays visible on the
- * admin Chat page.
+ * recorded while unanswerable ones land in Pending; clicking Indexed moves a
+ * record to Indexed (persisted across reloads) and deleting removes exactly
+ * that record; the Queries navigation item works and the navigation stays
+ * visible on the admin Chat page.
  */
 import { expect, test } from '@playwright/test';
 import { goTo, navLink, signIn, uploadFixture } from './helpers.js';
 
 test.describe('Queries Management', () => {
-  test('collects only unanswered questions, then edits and deletes them', async ({ page }) => {
+  test('collects only unanswered questions, then indexes and deletes them', async ({ page }) => {
     await page.goto('/');
     await signIn(page);
 
@@ -44,30 +44,24 @@ test.describe('Queries Management', () => {
     // Pending holds the question with its exact submitted text; nothing is
     // recorded for the answerable question.
     await expect(page.getByTestId('pending-count')).toHaveText('1');
-    await expect(page.getByTestId('edited-count')).toHaveText('0');
+    await expect(page.getByTestId('indexed-count')).toHaveText('0');
     const row = page.getByTestId('query-row').filter({ hasText: 'Who won the 1966 FIFA World Cup?' });
     await expect(row).toHaveCount(1);
 
-    // Edit: the editor shows the current text and saves a new phrasing.
-    await row.getByTestId('query-edit').click();
-    const editor = page.getByTestId('query-editor');
-    await expect(editor).toHaveValue('Who won the 1966 FIFA World Cup?');
-    await editor.fill('Which country won the 1966 FIFA World Cup?');
-    await page.getByTestId('query-save').click();
+    // Indexed: the button marks the record without any editing step.
+    await row.getByTestId('query-indexed').click();
 
-    // The record moves Pending -> Edited immediately, and the original text
-    // stays visible for reference.
+    // The record moves Pending -> Indexed immediately, keeping its exact text.
     await expect(page.getByTestId('pending-count')).toHaveText('0');
-    await expect(page.getByTestId('edited-count')).toHaveText('1');
-    const editedRow = page.getByTestId('query-row').filter({
-      hasText: 'Which country won the 1966 FIFA World Cup?',
+    await expect(page.getByTestId('indexed-count')).toHaveText('1');
+    const indexedRow = page.getByTestId('query-row').filter({
+      hasText: 'Who won the 1966 FIFA World Cup?',
     });
-    await expect(editedRow).toHaveCount(1);
-    await expect(editedRow).toContainText('Originally asked: “Who won the 1966 FIFA World Cup?”');
+    await expect(indexedRow).toHaveCount(1);
 
-    // The edit is persisted: after a reload it is still in Edited.
+    // The status change is persisted: after a reload it is still in Indexed.
     await page.reload();
-    await expect(page.getByTestId('edited-count')).toHaveText('1');
+    await expect(page.getByTestId('indexed-count')).toHaveText('1');
     await expect(page.getByTestId('pending-count')).toHaveText('0');
 
     // The dashboard card follows the pending total.
@@ -83,7 +77,7 @@ test.describe('Queries Management', () => {
 
     await navLink(page, 'Queries').click();
     await expect(page.getByTestId('pending-count')).toHaveText('1');
-    await expect(page.getByTestId('edited-count')).toHaveText('1');
+    await expect(page.getByTestId('indexed-count')).toHaveText('1');
 
     const pending2 = page
       .getByTestId('query-row')
@@ -95,9 +89,9 @@ test.describe('Queries Management', () => {
     await page.getByRole('button', { name: /Click again to delete/i }).click();
 
     await expect(page.getByTestId('pending-count')).toHaveText('0');
-    await expect(page.getByTestId('edited-count')).toHaveText('1');
+    await expect(page.getByTestId('indexed-count')).toHaveText('1');
     await expect(page.getByTestId('query-row').filter({
-      hasText: 'Which country won the 1966 FIFA World Cup?',
+      hasText: 'Who won the 1966 FIFA World Cup?',
     })).toHaveCount(1);
     await expect(pending2).toHaveCount(0);
   });

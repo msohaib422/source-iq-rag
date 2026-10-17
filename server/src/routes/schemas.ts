@@ -40,9 +40,5 @@ export const reindexSchema = z.object({
 // ---- queries management ----
 
 export const queriesQuerySchema = z.object({
-  status: z.enum(['pending', 'edited']).optional(),
-});
-
-export const updateQuerySchema = z.object({
-  question: z.string().trim().min(1, 'Query cannot be empty.').max(2000, 'Query is too long.'),
+  status: z.enum(['pending', 'indexed']).optional(),
 });

@@ -71,14 +71,17 @@ export interface IngestionResult {
 }
 
 /** A chat query the assistant could not answer, collected for admin review. */
-export type QueryStatus = 'pending' | 'edited';
+export type QueryStatus = 'pending' | 'indexed';
 
 export interface QueryRecord {
   id: string;
   userId: string;
   /** The user's question exactly as submitted (never paraphrased). */
   question: string;
-  /** The admin's current phrasing; null while the record is still pending. */
+  /**
+   * Legacy field from the removed edit workflow. Existing records keep
+   * whatever they hold; new records always carry null and nothing writes it.
+   */
   editedQuestion: string | null;
   status: QueryStatus;
   createdAt: string;
@@ -87,7 +90,7 @@ export interface QueryRecord {
 
 export interface QueriesResponse {
   queries: QueryRecord[];
-  counts: { pending: number; edited: number; total: number };
+  counts: { pending: number; indexed: number; total: number };
 }
 
 export interface HealthInfo {

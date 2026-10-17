@@ -108,11 +108,10 @@ export interface Store {
   createUnansweredQuery(input: CreateUnansweredQueryInput): Promise<QueryRecord>;
   listUnansweredQueries(userId: string, options?: ListUnansweredQueriesOptions): Promise<QueryRecord[]>;
   getUnansweredQuery(id: string, userId: string): Promise<QueryRecord | null>;
-  updateUnansweredQuery(
-    id: string,
-    userId: string,
-    patch: Partial<Pick<QueryRecord, 'editedQuestion' | 'status'>>,
-  ): Promise<QueryRecord | null>;
+  /** Only the status ever changes (pending -> indexed); the text is immutable. */
+  updateUnansweredQuery(id: string, userId: string, patch: Partial<Pick<QueryRecord, 'status'>>): Promise<
+    QueryRecord | null
+  >;
   deleteUnansweredQuery(id: string, userId: string): Promise<boolean>;
   countUnansweredQueries(userId: string, status?: QueryRecordStatus): Promise<number>;
 
