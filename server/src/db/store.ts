@@ -14,6 +14,8 @@
 import type {
   ChunkRecord,
   DocumentRecord,
+  QueryRecord,
+  QueryRecordStatus,
   ScoredChunk,
   StoreStats,
   UserRecord,
@@ -58,6 +60,15 @@ export interface ListChunksOptions {
   skip?: number;
 }
 
+export interface CreateUnansweredQueryInput {
+  userId: string;
+  question: string;
+}
+
+export interface ListUnansweredQueriesOptions {
+  status?: QueryRecordStatus;
+}
+
 export interface Store {
   readonly driver: 'atlas' | 'memory';
   init(): Promise<void>;
@@ -92,6 +103,18 @@ export interface Store {
 
   // ---- vector search ----
   vectorSearch(params: VectorSearchParams): Promise<ScoredChunk[]>;
+
+  // ---- unanswered queries (Queries Management) ----
+  createUnansweredQuery(input: CreateUnansweredQueryInput): Promise<QueryRecord>;
+  listUnansweredQueries(userId: string, options?: ListUnansweredQueriesOptions): Promise<QueryRecord[]>;
+  getUnansweredQuery(id: string, userId: string): Promise<QueryRecord | null>;
+  updateUnansweredQuery(
+    id: string,
+    userId: string,
+    patch: Partial<Pick<QueryRecord, 'editedQuestion' | 'status'>>,
+  ): Promise<QueryRecord | null>;
+  deleteUnansweredQuery(id: string, userId: string): Promise<boolean>;
+  countUnansweredQueries(userId: string, status?: QueryRecordStatus): Promise<number>;
 
   // ---- diagnostics ----
   stats(): Promise<StoreStats>;

@@ -141,10 +141,14 @@ healthRouter.get(
     // visitors and the admin both address.
     const kbId = await resolveKnowledgeBaseId(req.ctx.store, user);
     const documents = await req.ctx.store.listDocuments(kbId);
+    // Unanswered chat questions are collected per workspace too; the dashboard
+    // Queries card shows how many still await review (pending = unanswered).
+    const queries = await req.ctx.store.countUnansweredQueries(kbId, 'pending');
     res.json({
       documents: documents.length,
       chunks: documents.reduce((sum, d) => sum + d.chunkCount, 0),
       pages: documents.reduce((sum, d) => sum + d.pageCount, 0),
+      queries,
       ready: documents.filter((d) => d.status === 'ready').length,
       failed: documents.filter((d) => d.status === 'failed').length,
     });

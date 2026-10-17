@@ -36,3 +36,13 @@ export const reindexSchema = z.object({
   // Re-embed existing chunk text with the current model.
   reembed: z.boolean().default(true),
 });
+
+// ---- queries management ----
+
+export const queriesQuerySchema = z.object({
+  status: z.enum(['pending', 'edited']).optional(),
+});
+
+export const updateQuerySchema = z.object({
+  question: z.string().trim().min(1, 'Query cannot be empty.').max(2000, 'Query is too long.'),
+});

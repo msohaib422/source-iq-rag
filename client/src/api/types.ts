@@ -70,6 +70,26 @@ export interface IngestionResult {
   error?: string;
 }
 
+/** A chat query the assistant could not answer, collected for admin review. */
+export type QueryStatus = 'pending' | 'edited';
+
+export interface QueryRecord {
+  id: string;
+  userId: string;
+  /** The user's question exactly as submitted (never paraphrased). */
+  question: string;
+  /** The admin's current phrasing; null while the record is still pending. */
+  editedQuestion: string | null;
+  status: QueryStatus;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface QueriesResponse {
+  queries: QueryRecord[];
+  counts: { pending: number; edited: number; total: number };
+}
+
 export interface HealthInfo {
   status: string;
   service: string;
@@ -106,6 +126,8 @@ export interface WorkspaceStats {
   documents: number;
   chunks: number;
   pages: number;
+  /** Unanswered chat queries still awaiting admin review (the Queries card). */
+  queries: number;
   ready: number;
   failed: number;
 }

@@ -6,14 +6,23 @@ import { StatusBadge } from '../components/StatusBadge';
 import { useAsync } from '../hooks';
 import { useAuth } from '../context/AuthContext';
 
-function Stat({ value, label, hint }: { value: string | number; label: string; hint?: string }) {
-  return (
-    <div className="card stat-card">
+function Stat({ value, label, hint, to }: { value: string | number; label: string; hint?: string; to?: string }) {
+  const content = (
+    <>
       <span className="stat-value">{value}</span>
       <span className="stat-label">{label}</span>
       {hint ? <span className="stat-hint">{hint}</span> : null}
-    </div>
+    </>
   );
+  // Cards bound to a page open it; the link keeps the exact stat-card look.
+  if (to) {
+    return (
+      <Link to={to} className="card stat-card" style={{ textDecoration: 'none', color: 'inherit' }}>
+        {content}
+      </Link>
+    );
+  }
+  return <div className="card stat-card">{content}</div>;
 }
 
 export function DashboardPage() {
@@ -97,6 +106,12 @@ export function DashboardPage() {
           <Stat value={stats.data?.documents ?? 0} label="Documents" />
           <Stat value={stats.data?.chunks ?? 0} label="Indexed chunks" hint="384-dim vectors" />
           <Stat value={stats.data?.pages ?? 0} label="Pages" />
+          <Stat
+            value={stats.data?.queries ?? 0}
+            label="Queries"
+            hint="Unanswered, pending review"
+            to="/admin/queries"
+          />
         </div>
       )}
 

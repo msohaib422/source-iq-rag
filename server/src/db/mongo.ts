@@ -13,6 +13,8 @@ import { env } from '../config/env.js';
 import type {
   ChunkRecord,
   DocumentRecord,
+  QueryRecord,
+  QueryRecordStatus,
   ScoredChunk,
   StoreStats,
   UserRecord,
@@ -22,9 +24,11 @@ import type {
 import type {
   CreateChunkInput,
   CreateDocumentInput,
+  CreateUnansweredQueryInput,
   CreateUserInput,
   ListChunksOptions,
   ListDocumentsOptions,
+  ListUnansweredQueriesOptions,
   Store,
 } from './store.js';
 import { serviceUnavailable } from '../utils/errors.js';
@@ -93,6 +97,18 @@ const chunkSchema = new Schema(
 );
 chunkSchema.index({ documentId: 1, ordinal: 1 });
 
+const querySchema = new Schema(
+  {
+    userId: { type: Schema.Types.ObjectId, required: true, index: true, ref: 'User' },
+    // The user's question exactly as submitted; never rewritten by the system.
+    question: { type: String, required: true, trim: true },
+    editedQuestion: { type: String, default: null },
+    status: { type: String, enum: ['pending', 'edited'], default: 'pending', index: true },
+  },
+  { timestamps: true, collection: 'unanswered_queries' },
+);
+querySchema.index({ userId: 1, createdAt: -1 });
+
 // ---------------------------------------------------------------------------
 // Mappers
 // ---------------------------------------------------------------------------
@@ -146,6 +162,18 @@ function mapChunk(raw: Doc): ChunkRecord {
   };
 }
 
+function mapQuery(raw: Doc): QueryRecord {
+  return {
+    id: toId(raw._id),
+    userId: toId(raw.userId),
+    question: String(raw.question),
+    editedQuestion: (raw.editedQuestion as string | null) ?? null,
+    status: (raw.status as QueryRecord['status']) ?? 'pending',
+    createdAt: (raw.createdAt as Date) ?? new Date(),
+    updatedAt: (raw.updatedAt as Date) ?? new Date(),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Store
 // ---------------------------------------------------------------------------
@@ -162,6 +190,7 @@ export class MongoStore implements Store {
   private User: AnyModel;
   private Document: AnyModel;
   private Chunk: AnyModel;
+  private Query: AnyModel;
 
   private vectorIndexStatus: VectorIndexStatus = {
     backend: 'atlas',
@@ -176,6 +205,7 @@ export class MongoStore implements Store {
     this.User = mongoose.models.User ?? mongoose.model('User', userSchema);
     this.Document = mongoose.models.Document ?? mongoose.model('Document', documentSchema);
     this.Chunk = mongoose.models.Chunk ?? mongoose.model('Chunk', chunkSchema);
+    this.Query = mongoose.models.UnansweredQuery ?? mongoose.model('UnansweredQuery', querySchema);
   }
 
   async init(): Promise<void> {
@@ -200,6 +230,7 @@ export class MongoStore implements Store {
       this.User.syncIndexes() as unknown as Promise<unknown>,
       this.Document.syncIndexes() as unknown as Promise<unknown>,
       this.Chunk.syncIndexes() as unknown as Promise<unknown>,
+      this.Query.syncIndexes() as unknown as Promise<unknown>,
     ]);
   }
 
@@ -421,6 +452,62 @@ export class MongoStore implements Store {
 
     const scored = rows.map((row) => ({ chunk: mapChunk(row), score: Number(row.score ?? 0) }));
     return params.minScore === undefined ? scored : scored.filter((s) => s.score >= params.minScore!);
+  }
+
+  // ---- unanswered queries ----
+
+  async createUnansweredQuery(input: CreateUnansweredQueryInput): Promise<QueryRecord> {
+    const doc = await this.Query.create({ userId: input.userId, question: input.question, status: 'pending' });
+    return mapQuery(doc as Doc);
+  }
+
+  async listUnansweredQueries(
+    userId: string,
+    options: ListUnansweredQueriesOptions = {},
+  ): Promise<QueryRecord[]> {
+    if (!mongoose.isValidObjectId(userId)) return [];
+    const query: Record<string, unknown> = { userId: objectId(userId) };
+    if (options.status) query.status = options.status;
+    const docs = await this.Query.find(query).sort({ createdAt: -1 }).lean().exec();
+    return docs.map((d) => mapQuery(d as Doc));
+  }
+
+  async getUnansweredQuery(id: string, userId: string): Promise<QueryRecord | null> {
+    if (!mongoose.isValidObjectId(id)) return null;
+    const doc = await this.Query.findOne({ _id: objectId(id), userId: objectId(userId) }).lean().exec();
+    return doc ? mapQuery(doc as Doc) : null;
+  }
+
+  async updateUnansweredQuery(
+    id: string,
+    userId: string,
+    patch: Partial<Pick<QueryRecord, 'editedQuestion' | 'status'>>,
+  ): Promise<QueryRecord | null> {
+    if (!mongoose.isValidObjectId(id)) return null;
+    const allowed: Record<string, unknown> = {};
+    if (patch.editedQuestion !== undefined) allowed.editedQuestion = patch.editedQuestion;
+    if (patch.status !== undefined) allowed.status = patch.status;
+    const doc = await this.Query.findOneAndUpdate(
+      { _id: objectId(id), userId: objectId(userId) },
+      { $set: allowed },
+      { new: true },
+    )
+      .lean()
+      .exec();
+    return doc ? mapQuery(doc as Doc) : null;
+  }
+
+  async deleteUnansweredQuery(id: string, userId: string): Promise<boolean> {
+    if (!mongoose.isValidObjectId(id)) return false;
+    const res = await this.Query.deleteOne({ _id: objectId(id), userId: objectId(userId) });
+    return res.deletedCount > 0;
+  }
+
+  async countUnansweredQueries(userId: string, status?: QueryRecordStatus): Promise<number> {
+    if (!mongoose.isValidObjectId(userId)) return 0;
+    const query: Record<string, unknown> = { userId: objectId(userId) };
+    if (status) query.status = status;
+    return this.Query.countDocuments(query);
   }
 
   isConnected(): boolean {

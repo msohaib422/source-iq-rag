@@ -8,6 +8,7 @@ import { DashboardPage } from './pages/DashboardPage';
 import { DocumentDetailPage } from './pages/DocumentDetailPage';
 import { DocumentsPage } from './pages/DocumentsPage';
 import { LoginPage } from './pages/LoginPage';
+import { QueriesPage } from './pages/QueriesPage';
 
 /**
  * Two clearly separated front doors:
@@ -32,6 +33,19 @@ function SessionGate() {
     );
   }
   return <Outlet />;
+}
+
+/**
+ * Shell for the public chat route.
+ *
+ * Anonymous visitors get the minimal public chrome. A signed-in admin gets the
+ * full administrative shell instead, so the primary navigation
+ * (Dashboard / Documents / Chat / Queries) stays visible and highlights Chat
+ * while using the same chat page - without touching the chat layout itself.
+ */
+function ChatLayout() {
+  const { user } = useAuth();
+  return user ? <AdminLayout /> : <PublicLayout />;
 }
 
 /**
@@ -66,7 +80,7 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
 
       <Route element={<SessionGate />}>
-        <Route element={<PublicLayout />}>
+        <Route element={<ChatLayout />}>
           <Route path="/" element={<ChatPage />} />
           <Route path="/chat" element={<ChatPage />} />
         </Route>
@@ -76,6 +90,7 @@ export default function App() {
             <Route path="/admin" element={<DashboardPage />} />
             <Route path="/admin/documents" element={<DocumentsPage />} />
             <Route path="/admin/documents/:id" element={<DocumentDetailPage />} />
+            <Route path="/admin/queries" element={<QueriesPage />} />
           </Route>
         </Route>
       </Route>

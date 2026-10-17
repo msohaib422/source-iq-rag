@@ -52,6 +52,29 @@ export interface ChunkRecord {
   updatedAt: Date;
 }
 
+export type QueryRecordStatus = 'pending' | 'edited';
+
+/**
+ * A chat question the RAG pipeline could not answer from the indexed chunks.
+ *
+ * The submitted text is preserved exactly as the user typed it so the admin can
+ * see the real question; the edited phrasing lives beside it. Editing a record
+ * only ever changes this record - it never adds the question to the knowledge
+ * base (no document, chunk or embedding is created from Queries Management).
+ */
+export interface QueryRecord {
+  id: string;
+  userId: string;
+  /** The user's question exactly as submitted (never paraphrased). */
+  question: string;
+  /** The admin's current phrasing; null while the record is still pending. */
+  editedQuestion: string | null;
+  status: QueryRecordStatus;
+  createdAt: Date;
+  /** Timestamp of the most recent edit; equals createdAt while pending. */
+  updatedAt: Date;
+}
+
 export interface Citation {
   chunkId: string;
   documentId: string;

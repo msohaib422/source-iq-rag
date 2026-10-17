@@ -6,7 +6,7 @@
  * to that same chat.
  */
 import { expect, test } from '@playwright/test';
-import { goTo, signIn, signOut, uploadFixture } from './helpers.js';
+import { goTo, navLink, signIn, signOut, uploadFixture } from './helpers.js';
 
 test.describe('public chat vs admin dashboard', () => {
   test('anonymous visitors get the chat interface and nothing else', async ({ page }) => {
@@ -77,9 +77,11 @@ test.describe('public chat vs admin dashboard', () => {
       await expect(page.getByRole('button', { name: 'Open in document' }).first()).toBeVisible();
     }
 
-    // Back to the dashboard without signing in again.
-    await page.getByRole('link', { name: 'Admin dashboard' }).click();
-    await expect(page).toHaveURL(/\/admin/);
+    // Back to the dashboard without signing in again: the primary navigation
+    // stays visible on the chat page, with Chat highlighted.
+    await expect(navLink(page, 'Chat')).toHaveClass(/active/);
+    await navLink(page, 'Dashboard').click();
+    await expect(page).toHaveURL(/\/admin$/);
     await expect(page.getByRole('heading', { name: /Welcome back/i })).toBeVisible();
   });
 

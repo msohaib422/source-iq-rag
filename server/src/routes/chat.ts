@@ -5,14 +5,19 @@
  *  POST /api/chat/stream     - Server-Sent Events (citations -> deltas -> done)
  *
  * Chat is stateless: a request is answered from the shared knowledge base and
- * nothing about the exchange is stored, listed or replayed afterwards.
+ * the exchange itself is not stored. The one exception is a knowledge question
+ * that ends with no citation at all - the pipeline found no chunk that
+ * sufficiently supports it - which is recorded for the admin's Queries
+ * Management page (services/queries.ts).
  */
 import { Router } from 'express';
 import { z } from 'zod';
 import { asyncHandler, optionalAuth, validate } from '../middleware/index.js';
+import { recordUnansweredQuery } from '../services/queries.js';
 import { getLlmProvider } from '../services/llm/index.js';
 import { LlmConfigurationError } from '../services/llm/types.js';
-import { answerQuestion, streamAnswer } from '../services/rag.js';
+import { answerQuestion, classifyIntent, streamAnswer } from '../services/rag.js';
+import type { Citation } from '../types/domain.js';
 import { resolveKnowledgeBaseId } from '../services/accounts.js';
 import { notFound } from '../utils/errors.js';
 import { chatRequestSchema } from './schemas.js';
@@ -54,6 +59,7 @@ chatRouter.post(
     );
 
     const provider = getLlmProvider();
+    const intent = classifyIntent(input.question);
     const result = await answerQuestion(
       req.ctx.store,
       {
@@ -66,6 +72,14 @@ chatRouter.post(
       provider,
     );
 
+    // The pipeline's own relevance verdict: a knowledge question whose answer
+    // cites nothing was not supported by any chunk it saw. Small talk and
+    // unclear messages never record, and a retriever/LLM failure throws before
+    // this line, so technical errors are never mistaken for a bad question.
+    if (intent.kind === 'knowledge' && result.citations.length === 0) {
+      await recordUnansweredQuery(req.ctx.store, kbId, input.question);
+    }
+
     res.json(result);
   }),
 );
@@ -77,6 +91,7 @@ chatRouter.post(
     const input = req.body as ChatInput;
     const kbId = await resolveKnowledgeBaseId(req.ctx.store, req.user!);
     await assertDocumentsOwned(req, kbId, input.documentIds);
+    const intent = classifyIntent(input.question);
 
     const all = await req.ctx.store.listDocuments(kbId);
     await req.ctx.primeDocumentTitles(kbId, all.map((d) => d.id));
@@ -97,6 +112,8 @@ chatRouter.post(
 
     let answer = '';
     let doneSent = false;
+    /** Citations of the pipeline's own done frame (aligned to what was grounded). */
+    let finalCitations: Citation[] | null = null;
 
     try {
       for await (const event of streamAnswer(
@@ -120,6 +137,7 @@ chatRouter.post(
           // Forward the pipeline's own payload: it carries the citations the
           // answer actually referenced, not everything that was retrieved.
           doneSent = true;
+          finalCitations = (event.payload as { citations: Citation[] }).citations;
           send('done', event.payload);
         }
       }
@@ -127,6 +145,14 @@ chatRouter.post(
       // The client was disconnected before the answer completed.
       if (!doneSent && !controller.signal.aborted) {
         send('done', { citations: [], answerLength: answer.length });
+      }
+
+      // Same relevance verdict as the non-streaming endpoint: a knowledge
+      // question whose grounded reply referenced no chunk is recorded for the
+      // admin. Aborted or errored streams never reach this point (the abort
+      // guard above, or the catch below).
+      if (!controller.signal.aborted && intent.kind === 'knowledge' && finalCitations?.length === 0) {
+        await recordUnansweredQuery(req.ctx.store, kbId, input.question);
       }
     } catch (err) {
       send('error', {

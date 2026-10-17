@@ -61,6 +61,11 @@ test.describe('authentication and access control', () => {
     expect((await page.request.delete(`/api/documents/${missing}`)).status()).toBe(401);
     expect((await page.request.patch(`/api/chunks/${missing}`, { data: { text: 'x' } })).status()).toBe(401);
     expect((await page.request.delete(`/api/chunks/${missing}`)).status()).toBe(401);
+
+    // Queries Management is admin-only too: no list, edit or delete for visitors.
+    expect((await page.request.get('/api/queries')).status()).toBe(401);
+    expect((await page.request.patch(`/api/queries/${missing}`, { data: { question: 'x' } })).status()).toBe(401);
+    expect((await page.request.delete(`/api/queries/${missing}`)).status()).toBe(401);
   });
 
   test('has no public registration route', async ({ page }) => {
