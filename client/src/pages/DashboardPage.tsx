@@ -6,34 +6,36 @@ import { StatusBadge } from '../components/StatusBadge';
 import { useAsync } from '../hooks';
 import { useAuth } from '../context/AuthContext';
 
-function Stat({ value, label, hint, to }: { value: string | number; label: string; hint?: string; to?: string }) {
-  const content = (
-    <>
-      <span className="stat-value">{value}</span>
+/**
+ * Informational statistic: the value sits inside a circular indicator with the
+ * label and any supporting note below it. These cards are deliberately not
+ * interactive — the numbers are explained and managed on their own pages
+ * (Documents, Queries), which is where the navigation links live.
+ */
+function Stat({ value, label, hint }: { value: string | number; label: string; hint?: string }) {
+  // Counts of five digits or more shrink so they stay legible inside the ring.
+  const tight = String(value).length >= 5;
+  return (
+    <div className="card stat-card">
+      <div className="stat-ring">
+        <span className={`stat-value${tight ? ' stat-value-tight' : ''}`}>{value}</span>
+      </div>
       <span className="stat-label">{label}</span>
       {hint ? <span className="stat-hint">{hint}</span> : null}
-    </>
+    </div>
   );
-  // Cards bound to a page open it; the link keeps the exact stat-card look.
-  if (to) {
-    return (
-      <Link to={to} className="card stat-card" style={{ textDecoration: 'none', color: 'inherit' }}>
-        {content}
-      </Link>
-    );
-  }
-  return <div className="card stat-card">{content}</div>;
 }
 
 export function DashboardPage() {
   const { user } = useAuth();
   const stats = useAsync(() => api.stats(), []);
   const docs = useAsync(() => api.listDocuments(), []);
+  // The health call stays for connectivity feedback only: the embedding/LLM
+  // metrics panel was removed from the dashboard, but the admin still wants to
+  // know immediately when the API is unreachable.
   const health = useAsync(() => api.health(), []);
 
   const recent = (docs.data?.documents ?? []).slice(0, 5);
-  const modelOk = health.data?.embedding.loaded;
-  const expected = health.data?.embedding.expectedModel ?? 'BAAI/bge-small-en-v1.5';
 
   return (
     <div>
@@ -41,7 +43,7 @@ export function DashboardPage() {
         <div>
           <h1>Welcome back{user?.name ? `, ${user.name.split(' ')[0]}` : ''}</h1>
           <p className="subtitle">
-            SourceIQ indexes your PDFs with a local embedding model and answers with citations.
+            Your knowledge base, indexing activity, and query insights — all in one place.
           </p>
         </div>
         {user ? (
@@ -57,42 +59,6 @@ export function DashboardPage() {
         </Alert>
       ) : null}
 
-      {health.data ? (
-        <div className="card mb">
-          <div className="row wrap" style={{ justifyContent: 'space-between' }}>
-            <div>
-              <div className="row" style={{ marginBottom: '0.15rem' }}>
-                <strong>{health.data.embedding.expectedModel}</strong>
-                <span className={`badge badge-${modelOk ? 'ready' : 'pending'}`}>
-                  {modelOk ? 'Loaded' : 'Not loaded'}
-                </span>
-                <span className="badge">{health.data.embedding.dimensions} dims</span>
-                <span className="badge">{health.data.embedding.pooling} pooling</span>
-              </div>
-              <p className="small faint">
-                Running locally on your machine — document text never leaves this server for embedding.
-              </p>
-            </div>
-            <dl className="kv" style={{ minWidth: 220 }}>
-              <dt>LLM</dt>
-              <dd>
-                {health.data.llm.provider} / {health.data.llm.model}
-              </dd>
-              <dt>Datastore</dt>
-              <dd>{health.data.store.driver}</dd>
-              <dt>API</dt>
-              <dd>{health.data.environment}</dd>
-            </dl>
-          </div>
-          {expected !== 'BAAI/bge-small-en-v1.5' ? (
-            <Alert tone="warning" title="Unexpected embedding model">
-              The server is configured with <code>{expected}</code>. The project specification requires{' '}
-              <code>BAAI/bge-small-en-v1.5</code>.
-            </Alert>
-          ) : null}
-        </div>
-      ) : null}
-
       {stats.loading ? (
         <div className="center-state">
           <Spinner size="lg" />
@@ -102,16 +68,11 @@ export function DashboardPage() {
           {stats.error}
         </Alert>
       ) : (
-        <div className="card-grid mb">
+        <div className="stat-grid mb">
           <Stat value={stats.data?.documents ?? 0} label="Documents" />
           <Stat value={stats.data?.chunks ?? 0} label="Indexed chunks" hint="384-dim vectors" />
           <Stat value={stats.data?.pages ?? 0} label="Pages" />
-          <Stat
-            value={stats.data?.queries ?? 0}
-            label="Queries"
-            hint="Unanswered, pending review"
-            to="/admin/queries"
-          />
+          <Stat value={stats.data?.queries ?? 0} label="Queries" hint="Unanswered, pending review" />
         </div>
       )}
 
@@ -139,9 +100,11 @@ export function DashboardPage() {
         ) : (
           <div className="doc-list">
             {recent.map((doc) => (
+              // The detail route lives under /admin — a bare /documents/:id
+              // hits the catch-all and bounces to the public chat.
               <Link
                 key={doc.id}
-                to={`/documents/${doc.id}`}
+                to={`/admin/documents/${doc.id}`}
                 className="doc-row"
                 style={{ textDecoration: 'none', color: 'inherit' }}
               >

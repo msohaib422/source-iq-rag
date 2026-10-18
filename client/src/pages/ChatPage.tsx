@@ -9,12 +9,6 @@ import { Spinner } from '../components/Spinner';
 import { useAuth } from '../context/AuthContext';
 import { useAsync } from '../hooks';
 
-const SUGGESTIONS = [
-  'What are the main topics covered in this document?',
-  'Summarise the key findings.',
-  'What dates and figures are mentioned?',
-];
-
 /** Render the answer, turning [n] markers into interactive citation chips. */
 function AnswerBody({ content, onCite }: { content: string; onCite: (index: number) => void }) {
   return (
@@ -211,17 +205,15 @@ export function ChatPage() {
       {isAdmin ? (
         <aside className="chat-sidebar">
           <div className="card">
-            <h3 style={{ fontSize: '0.78rem', textTransform: 'uppercase', letterSpacing: '0.07em', color: 'var(--text-faint)', marginBottom: '0.5rem' }}>
-              Scope
-            </h3>
+            <h3 className="panel-label">Scope</h3>
             {documents.loading ? (
               <Spinner />
             ) : readyDocs.length === 0 ? (
               <p className="small faint">No indexed documents yet. Upload a PDF first.</p>
             ) : (
-              <div className="col" style={{ gap: '0.2rem' }}>
+              <div className="scope-list">
                 {readyDocs.map((doc) => (
-                  <label key={doc.id} className="row small" style={{ cursor: 'pointer', gap: '0.4rem' }}>
+                  <label key={doc.id} className="scope-option">
                     <input
                       type="checkbox"
                       checked={selectedDocumentIds.includes(doc.id)}
@@ -254,37 +246,12 @@ export function ChatPage() {
 
         <div className="chat-messages" data-testid="chat-messages">
           {messages.length === 0 && !sending ? (
+            // Deliberate minimal empty state: the conversation area keeps its
+            // height and the composer stays anchored at the bottom. Only the
+            // old heading, explanatory paragraph and example-question list were
+            // removed — the container itself remains.
             <div className="chat-empty">
-              <div>
-                <div className="empty-icon" aria-hidden="true">
-                  💬
-                </div>
-                <h2>{isAdmin ? 'Ask your documents anything' : 'Ask a question'}</h2>
-                <p>
-                  {isAdmin ? (
-                    <>
-                      Answers are grounded in retrieved passages and cite the exact chunk they came from. Embeddings run
-                      locally with <code>BAAI/bge-small-en-v1.5</code>.
-                    </>
-                  ) : (
-                    <>Answers come from the indexed library, and each one shows the source passage it came from.</>
-                  )}
-                </p>
-                <ul>
-                  {SUGGESTIONS.map((suggestion) => (
-                    <li key={suggestion}>
-                      <button
-                        type="button"
-                        className="btn btn-ghost btn-sm"
-                        style={{ padding: '0.2rem 0.3rem', height: 'auto' }}
-                        onClick={() => void send(suggestion)}
-                      >
-                        {suggestion}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              <p className="chat-empty-hint">No messages yet — your conversation with SourceIQ will appear here.</p>
             </div>
           ) : null}
 
