@@ -237,7 +237,7 @@ export function ChatPage() {
 
       <section className="chat-panel">
         {error ? (
-          <div style={{ padding: '1rem 1.25rem 0' }}>
+          <div className="chat-alert">
             <Alert tone="error" title="Chat error" onDismiss={() => setError(null)}>
               {error}
             </Alert>
@@ -251,92 +251,99 @@ export function ChatPage() {
             // old heading, explanatory paragraph and example-question list were
             // removed — the container itself remains.
             <div className="chat-empty">
-              <p className="chat-empty-hint">No messages yet — your conversation with SourceIQ will appear here.</p>
-            </div>
-          ) : null}
-
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={`msg msg-${message.role}`}
-              data-testid={`message-${message.role}`}
-            >
-              <div className="msg-avatar" aria-hidden="true">
-                {message.role === 'user' ? 'You' : 'AI'}
-              </div>
-              <div className="msg-body">
-                <div className="msg-role">{message.role === 'user' ? 'You' : 'SourceIQ'}</div>
-                {message.role === 'user' ? (
-                  <div className="msg-content">{message.content}</div>
-                ) : (
-                  <>
-                    <AnswerBody
-                      content={message.content}
-                      onCite={(index) => {
-                        setStreamCitations(message.citations);
-                        setActiveCitationIndex(index);
-                      }}
-                    />
-                    <CitationList
-                      citations={message.citations}
-                      showDiagnostics={isAdmin}
-                      {...(isAdmin
-                        ? {
-                            onOpenDocument: (documentId: string, chunkId: string) =>
-                              navigate(`/admin/documents/${documentId}?chunk=${encodeURIComponent(chunkId)}`),
-                          }
-                        : {})}
-                    />
-                  </>
-                )}
-              </div>
-            </div>
-          ))}
-
-          {streaming ? (
-            <div className="msg msg-assistant" data-testid="message-streaming">
-              <div className="msg-avatar" aria-hidden="true">
-                AI
-              </div>
-              <div className="msg-body">
-                <div className="msg-role">SourceIQ</div>
-                {streamingAnswer ? (
-                  <>
-                    {/* Streamed text is rendered by the same component as the
-                        finished answer. A plain-text preview here was discarded
-                        and re-rendered as markdown when the stream completed,
-                        which changed the answer's layout (paragraph margins,
-                        citation chips) after it had appeared, while the
-                        auto-scroll animation was still chasing the old height. */}
-                    <AnswerBody
-                      content={streamingAnswer}
-                      onCite={(index) => setActiveCitationIndex(index)}
-                    />
-                    <CitationList citations={streamCitations} showDiagnostics={isAdmin} />
-                  </>
-                ) : (
-                  <div className="row">
-                    <Spinner label="Searching your documents and drafting an answer…" />
-                  </div>
-                )}
+              <div>
+                <div className="chat-empty-mark" aria-hidden="true">
+                  S
+                </div>
+                <p className="chat-empty-hint">
+                  No messages yet — your conversation with SourceIQ will appear here.
+                </p>
               </div>
             </div>
           ) : null}
 
-          <div ref={endRef} />
+          <div className="chat-thread">
+            {messages.map((message) => (
+              <div
+                key={message.id}
+                className={`msg msg-${message.role}`}
+                data-testid={`message-${message.role}`}
+              >
+                <div className="msg-avatar" aria-hidden="true">
+                  {message.role === 'user' ? 'You' : 'AI'}
+                </div>
+                <div className="msg-body">
+                  <div className="msg-role">{message.role === 'user' ? 'You' : 'SourceIQ'}</div>
+                  {message.role === 'user' ? (
+                    <div className="msg-content">{message.content}</div>
+                  ) : (
+                    <>
+                      <AnswerBody
+                        content={message.content}
+                        onCite={(index) => {
+                          setStreamCitations(message.citations);
+                          setActiveCitationIndex(index);
+                        }}
+                      />
+                      <CitationList
+                        citations={message.citations}
+                        showDiagnostics={isAdmin}
+                        {...(isAdmin
+                          ? {
+                              onOpenDocument: (documentId: string, chunkId: string) =>
+                                navigate(`/admin/documents/${documentId}?chunk=${encodeURIComponent(chunkId)}`),
+                            }
+                          : {})}
+                      />
+                    </>
+                  )}
+                </div>
+              </div>
+            ))}
+
+            {streaming ? (
+              <div className="msg msg-assistant" data-testid="message-streaming">
+                <div className="msg-avatar" aria-hidden="true">
+                  AI
+                </div>
+                <div className="msg-body">
+                  <div className="msg-role">SourceIQ</div>
+                  {streamingAnswer ? (
+                    <>
+                      {/* Streamed text is rendered by the same component as the
+                          finished answer. A plain-text preview here was discarded
+                          and re-rendered as markdown when the stream completed,
+                          which changed the answer's layout (paragraph margins,
+                          citation chips) after it had appeared, while the
+                          auto-scroll animation was still chasing the old height. */}
+                      <AnswerBody
+                        content={streamingAnswer}
+                        onCite={(index) => setActiveCitationIndex(index)}
+                      />
+                      <CitationList citations={streamCitations} showDiagnostics={isAdmin} />
+                    </>
+                  ) : (
+                    <div className="row">
+                      <Spinner label="Searching your documents and drafting an answer…" />
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : null}
+
+            <div ref={endRef} />
+          </div>
         </div>
 
         <form className="chat-composer" onSubmit={onSubmit}>
           {activeCitation ? (
-            <div className="alert alert-info" style={{ margin: 0 }}>
+            <div className="alert alert-info">
               <span aria-hidden="true">❝</span>
               <div className="alert-body small">
                 <strong>{activeCitation.documentTitle}</strong>
                 {activeCitation.page ? ` · page ${activeCitation.page}` : ''}
                 {isAdmin ? ` · similarity ${activeCitation.score.toFixed(3)}` : ''}
-                <div className="citation-snippet" style={{ marginTop: '0.3rem' }}>
-                  {activeCitation.snippet}
-                </div>
+                <div className="citation-snippet composer-preview">{activeCitation.snippet}</div>
               </div>
               <button
                 type="button"
@@ -360,7 +367,7 @@ export function ChatPage() {
                   void send(question);
                 }
               }}
-              placeholder="Ask a question about your documents…  (Enter to send, Shift+Enter for a new line)"
+              placeholder="Ask a question about your documents…"
               aria-label="Your question"
               data-testid="chat-input"
               rows={1}

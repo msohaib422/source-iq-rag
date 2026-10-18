@@ -31,7 +31,7 @@ export function CitationList({
             ) : null}
           </div>
           <div className="citation-snippet">{citation.snippet}</div>
-          <div className="row wrap mt" style={{ marginTop: '0.4rem', gap: '0.35rem' }}>
+          <div className="citation-actions">
             <button
               type="button"
               className="btn btn-sm btn-ghost"

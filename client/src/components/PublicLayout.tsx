@@ -1,13 +1,15 @@
-import { Link, NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 
 /**
  * Public shell.
  *
  * Anonymous visitors never see administrative chrome: no navigation, no
- * statistics, no health, no management. The header carries branding and a single
- * quiet entry point to the admin sign-in; a signed-in admin additionally gets a
- * way back to the dashboard and to sign out.
+ * statistics, no health, no management. The header carries branding only — the
+ * administrative sign-in link used to live here, but it is not part of the
+ * visitor experience any more. A signed-in admin keeps the two legitimate
+ * controls: a way back to the dashboard and a way to sign out. The /login route
+ * and the server-side authentication it guards are untouched.
  */
 export function PublicLayout() {
   const { user, logout } = useAuth();
@@ -23,30 +25,23 @@ export function PublicLayout() {
           <span>SourceIQ</span>
         </NavLink>
 
-        <div className="header-actions">
-          {user ? (
-            <>
-              <NavLink to="/admin" className="btn btn-sm">
-                Admin dashboard
-              </NavLink>
-              <button
-                type="button"
-                className="btn btn-sm"
-                onClick={() => {
-                  logout();
-                  navigate('/', { replace: true });
-                }}
-              >
-                Sign out
-              </button>
-            </>
-          ) : (
-            // Regular visitors need no account; this is the admin-only entry point.
-            <Link to="/login" className="btn btn-sm">
-              Admin sign in
-            </Link>
-          )}
-        </div>
+        {user ? (
+          <div className="header-actions">
+            <NavLink to="/admin" className="btn btn-sm">
+              Admin dashboard
+            </NavLink>
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={() => {
+                logout();
+                navigate('/', { replace: true });
+              }}
+            >
+              Sign out
+            </button>
+          </div>
+        ) : null}
       </header>
 
       <main className="app-main">

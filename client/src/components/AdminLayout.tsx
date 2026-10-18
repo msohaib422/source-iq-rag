@@ -15,6 +15,9 @@ const NAV = [
  * anonymous visitor. It carries the management navigation, the signed-in admin
  * and sign-out. The chat route stays reachable from here, which is how the admin
  * tests the RAG system without losing administrative access.
+ *
+ * The nav has no wrapper of its own: `.app-nav` is a plain flex row and each
+ * link paints its own state, so only the selected item carries a background.
  */
 export function AdminLayout() {
   const { user, logout } = useAuth();

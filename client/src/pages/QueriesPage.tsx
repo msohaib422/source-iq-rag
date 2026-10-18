@@ -90,7 +90,7 @@ export function QueriesPage() {
       ) : (
         <>
           <div className="card mb">
-            <div className="row" style={{ justifyContent: 'space-between', marginBottom: '0.85rem' }}>
+            <div className="section-head">
               <h2>Pending</h2>
               <span className="badge badge-pending" data-testid="pending-count">
                 {counts?.pending ?? pending.length}
@@ -116,7 +116,7 @@ export function QueriesPage() {
           </div>
 
           <div className="card">
-            <div className="row" style={{ justifyContent: 'space-between', marginBottom: '0.85rem' }}>
+            <div className="section-head">
               <h2>Indexed</h2>
               <span className="badge badge-indexed" data-testid="indexed-count">
                 {counts?.indexed ?? indexed.length}

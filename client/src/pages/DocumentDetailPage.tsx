@@ -207,7 +207,7 @@ export function DocumentDetailPage() {
       ) : null}
 
       <div className="card">
-        <div className="row" style={{ justifyContent: 'space-between', marginBottom: '0.85rem' }}>
+        <div className="section-head">
           <h2>Chunks</h2>
           {totalPages > 1 ? (
             <div className="row">

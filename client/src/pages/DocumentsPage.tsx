@@ -145,7 +145,7 @@ export function DocumentsPage() {
               <div className="doc-row" key={doc.id} data-testid="document-row">
                 <span className="doc-icon">PDF</span>
                 <span className="doc-info">
-                  <Link to={`/admin/documents/${doc.id}`} className="doc-title" style={{ color: 'inherit' }}>
+                  <Link to={`/admin/documents/${doc.id}`} className="doc-title">
                     {doc.title}
                   </Link>
                   <span className="doc-meta">

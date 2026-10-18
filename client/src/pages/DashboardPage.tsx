@@ -7,21 +7,23 @@ import { useAsync } from '../hooks';
 import { useAuth } from '../context/AuthContext';
 
 /**
- * Informational statistic: the value sits inside a circular indicator with the
- * label and any supporting note below it. These cards are deliberately not
- * interactive — the numbers are explained and managed on their own pages
- * (Documents, Queries), which is where the navigation links live.
+ * Informational statistic: an eyebrow label, the value, and an optional
+ * supporting note. These cards are deliberately not interactive — the numbers
+ * are explained and managed on their own pages (Documents, Queries), which is
+ * where the navigation links live. The note line keeps its height even when
+ * empty so all four values sit on the same baseline.
  */
 function Stat({ value, label, hint }: { value: string | number; label: string; hint?: string }) {
-  // Counts of five digits or more shrink so they stay legible inside the ring.
+  // Counts of five digits or more shrink so they stay comfortable in the card.
   const tight = String(value).length >= 5;
   return (
     <div className="card stat-card">
-      <div className="stat-ring">
-        <span className={`stat-value${tight ? ' stat-value-tight' : ''}`}>{value}</span>
-      </div>
-      <span className="stat-label">{label}</span>
-      {hint ? <span className="stat-hint">{hint}</span> : null}
+      <span className="stat-label">
+        <span className="stat-dot" aria-hidden="true" />
+        {label}
+      </span>
+      <span className={`stat-value${tight ? ' stat-value-tight' : ''}`}>{value}</span>
+      <span className="stat-hint">{hint ?? ''}</span>
     </div>
   );
 }
@@ -39,7 +41,7 @@ export function DashboardPage() {
 
   return (
     <div>
-      <div className="page-head">
+      <div className="card page-hero page-head">
         <div>
           <h1>Welcome back{user?.name ? `, ${user.name.split(' ')[0]}` : ''}</h1>
           <p className="subtitle">
@@ -77,9 +79,12 @@ export function DashboardPage() {
       )}
 
       <div className="card">
-        <div className="row" style={{ justifyContent: 'space-between', marginBottom: '0.85rem' }}>
-          <h2>Recent documents</h2>
-          <Link to="/admin/documents" className="small">
+        <div className="section-head">
+          <div>
+            <h2>Recent documents</h2>
+            <p className="section-sub">The latest files added to your knowledge base.</p>
+          </div>
+          <Link to="/admin/documents" className="btn btn-sm section-action">
             View all →
           </Link>
         </div>
@@ -102,12 +107,7 @@ export function DashboardPage() {
             {recent.map((doc) => (
               // The detail route lives under /admin — a bare /documents/:id
               // hits the catch-all and bounces to the public chat.
-              <Link
-                key={doc.id}
-                to={`/admin/documents/${doc.id}`}
-                className="doc-row"
-                style={{ textDecoration: 'none', color: 'inherit' }}
-              >
+              <Link key={doc.id} to={`/admin/documents/${doc.id}`} className="doc-row">
                 <span className="doc-icon">PDF</span>
                 <span className="doc-info">
                   <span className="doc-title">{doc.title}</span>
@@ -118,6 +118,9 @@ export function DashboardPage() {
                   </span>
                 </span>
                 <StatusBadge status={doc.status} />
+                <span className="doc-row-go" aria-hidden="true">
+                  →
+                </span>
               </Link>
             ))}
           </div>
