@@ -80,6 +80,7 @@ export interface Store {
   createUser(input: CreateUserInput): Promise<UserRecord>;
   findUserByEmail(email: string): Promise<UserRecord | null>;
   findUserById(id: string): Promise<UserRecord | null>;
+  updateUser(id: string, patch: Partial<Pick<UserRecord, 'name' | 'email' | 'passwordHash'>>): Promise<UserRecord | null>;
 
   // ---- documents ----
   createDocument(input: CreateDocumentInput): Promise<DocumentRecord>;

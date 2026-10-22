@@ -141,6 +141,10 @@ export const api = {
   login: (body: { email: string; password: string }) =>
     request<{ token: string; user: User }>('/api/auth/login', { method: 'POST', body, auth: false }),
   me: () => request<{ user: User }>('/api/auth/me'),
+  updateProfile: (body: { name?: string; email?: string }) =>
+    request<{ user: User }>('/api/auth/me', { method: 'PATCH', body }),
+  changePassword: (body: { currentPassword: string; newPassword: string }) =>
+    request<void>('/api/auth/change-password', { method: 'POST', body }),
 
   // ---- documents ----
   listDocuments: (params: { search?: string; status?: DocumentStatus } = {}) => {

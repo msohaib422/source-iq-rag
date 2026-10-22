@@ -1,10 +1,12 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useTheme } from '../context/ThemeContext';
 
 const NAV = [
   { to: '/admin', label: 'Dashboard', end: true },
   { to: '/admin/documents', label: 'Documents', end: false },
   { to: '/admin/queries', label: 'Queries', end: false },
+  { to: '/admin/settings', label: 'Settings', end: false },
   { to: '/chat', label: 'Chat', end: false },
 ];
 
@@ -21,6 +23,7 @@ const NAV = [
  */
 export function AdminLayout() {
   const { user, logout } = useAuth();
+  const { theme, toggleTheme } = useTheme();
   const navigate = useNavigate();
 
   return (
@@ -52,6 +55,15 @@ export function AdminLayout() {
               <span className="small muted nowrap user-name" title={user.email}>
                 {user.name}
               </span>
+              <button
+                type="button"
+                className="btn btn-sm btn-ghost"
+                onClick={toggleTheme}
+                aria-label="Toggle theme"
+                title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
+              >
+                {theme === 'dark' ? '☀' : '🌙'}
+              </button>
               <button
                 type="button"
                 className="btn btn-sm"

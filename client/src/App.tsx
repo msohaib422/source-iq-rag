@@ -9,6 +9,7 @@ import { DocumentDetailPage } from './pages/DocumentDetailPage';
 import { DocumentsPage } from './pages/DocumentsPage';
 import { LoginPage } from './pages/LoginPage';
 import { QueriesPage } from './pages/QueriesPage';
+import { SettingsPage } from './pages/SettingsPage';
 
 /**
  * Two clearly separated front doors:
@@ -91,6 +92,7 @@ export default function App() {
             <Route path="/admin/documents" element={<DocumentsPage />} />
             <Route path="/admin/documents/:id" element={<DocumentDetailPage />} />
             <Route path="/admin/queries" element={<QueriesPage />} />
+            <Route path="/admin/settings" element={<SettingsPage />} />
           </Route>
         </Route>
       </Route>
