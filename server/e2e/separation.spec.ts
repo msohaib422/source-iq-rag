@@ -25,8 +25,8 @@ test.describe('public chat vs admin dashboard', () => {
     await expect(page.getByTestId('upload-zone')).toHaveCount(0);
     await expect(page.getByRole('heading', { name: 'Scope' })).toHaveCount(0);
 
-    // A clearly available, but unobtrusive, admin entry point.
-    await expect(page.getByRole('link', { name: 'Admin sign in' })).toBeVisible();
+    // No administrative affordance in the visitor header: branding only.
+    await expect(page.getByRole('link', { name: 'Admin sign in' })).toHaveCount(0);
   });
 
   test('signing in switches to the full administrative dashboard', async ({ page }) => {
@@ -92,7 +92,7 @@ test.describe('public chat vs admin dashboard', () => {
     await expect(page.getByTestId('chat-input')).toBeVisible();
     await expect(page.locator('.app-nav')).toHaveCount(0);
     await expect(page.getByRole('button', { name: 'Sign out' })).toHaveCount(0);
-    await expect(page.getByRole('link', { name: 'Admin sign in' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Admin sign in' })).toHaveCount(0);
   });
 
   test('a reload without a valid session falls back to the public chat', async ({ page }) => {
@@ -106,6 +106,6 @@ test.describe('public chat vs admin dashboard', () => {
 
     await expect(page.getByTestId('chat-input')).toBeVisible();
     await expect(page.locator('.app-nav')).toHaveCount(0);
-    await expect(page.getByRole('link', { name: 'Admin sign in' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'Admin sign in' })).toHaveCount(0);
   });
 });

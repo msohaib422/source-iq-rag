@@ -26,8 +26,11 @@ test.describe('authentication and access control', () => {
     await expect(page.getByText(/BAAI\/bge-small-en-v1\.5/)).toHaveCount(0);
     await expect(page.getByTestId('upload-zone')).toHaveCount(0);
 
-    // The only admin affordance is the sign-in entry point.
-    await expect(page.getByRole('link', { name: 'Admin sign in' })).toBeVisible();
+    // The public header offers no administrative affordance at all. The admin
+    // sign-in route (/login) still exists and guards the dashboard; it is just
+    // not advertised in the visitor interface.
+    await expect(page.getByRole('link', { name: 'Admin sign in' })).toHaveCount(0);
+    await expect(page.locator('.app-header .header-actions')).toHaveCount(0);
 
     // /chat is the same public experience, with no redirect to /login.
     await page.goto('/chat');
