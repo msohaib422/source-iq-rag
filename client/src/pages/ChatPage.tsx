@@ -153,7 +153,16 @@ export function ChatPage() {
     <div className={`chat-layout${isAdmin ? '' : ' chat-layout-full'}`}>
       {isAdmin ? (
         <aside className="chat-sidebar">
-          <div className="card">
+          <div className="card chat-side-card">
+            <div className="chat-side-head">
+              <span className="chat-side-mark" aria-hidden="true">
+                S
+              </span>
+              <div>
+                <div className="chat-side-name">SourceIQ</div>
+                <div className="chat-side-sub faint">Answers cite your documents</div>
+              </div>
+            </div>
             <h3 className="panel-label">Scope</h3>
             {documents.loading ? (
               <Spinner />

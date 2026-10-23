@@ -8,7 +8,7 @@
  */
 
 /** Default profile avatar: a neutral person silhouette for user messages. */
-function PersonIcon() {
+export function PersonIcon() {
   return (
     <svg
       className="msg-avatar-icon"

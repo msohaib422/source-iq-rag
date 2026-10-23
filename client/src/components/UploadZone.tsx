@@ -1,6 +1,7 @@
 import { useCallback, useRef, useState } from 'react';
 import { api } from '../api/client';
 import { Alert } from './Alert';
+import { DocumentIcon } from './icons';
 import { Spinner } from './Spinner';
 
 export interface UploadResult {
@@ -113,7 +114,7 @@ export function UploadZone({ onUploaded }: { onUploaded: (result: UploadResult) 
         data-testid="upload-zone"
       >
         <div className="dz-icon" aria-hidden="true">
-          {busy ? <Spinner size="lg" /> : '📄'}
+          {busy ? <Spinner size="lg" /> : <DocumentIcon />}
         </div>
         <div className="dz-title">
           {busy ? (phase === 'uploading' ? 'Uploading…' : 'Extracting, chunking & embedding…') : 'Drop a PDF here'}

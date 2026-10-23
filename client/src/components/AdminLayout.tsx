@@ -1,13 +1,15 @@
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
+import { PersonIcon } from './MessageAvatar';
+import { ChatIcon, DashboardIcon, DocumentIcon, InboxIcon, MoonIcon, SettingsIcon, SunIcon } from './icons';
 
 const NAV = [
-  { to: '/admin', label: 'Dashboard', end: true },
-  { to: '/admin/documents', label: 'Documents', end: false },
-  { to: '/admin/queries', label: 'Queries', end: false },
-  { to: '/admin/settings', label: 'Settings', end: false },
-  { to: '/chat', label: 'Chat', end: false },
+  { to: '/admin', label: 'Dashboard', end: true, Icon: DashboardIcon },
+  { to: '/admin/documents', label: 'Documents', end: false, Icon: DocumentIcon },
+  { to: '/admin/queries', label: 'Queries', end: false, Icon: InboxIcon },
+  { to: '/admin/settings', label: 'Settings', end: false, Icon: SettingsIcon },
+  { to: '/chat', label: 'Chat', end: false, Icon: ChatIcon },
 ];
 
 /**
@@ -33,18 +35,22 @@ export function AdminLayout() {
           <span className="brand-mark" aria-hidden="true">
             S
           </span>
-          <span>SourceIQ</span>
+          <span className="brand-text">
+            <span className="brand-name">SourceIQ</span>
+            <span className="brand-sub">Document knowledge assistant</span>
+          </span>
         </NavLink>
 
         <nav className="app-nav" aria-label="Primary">
-          {NAV.map((item) => (
+          {NAV.map(({ to, label, end, Icon }) => (
             <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
+              key={to}
+              to={to}
+              end={end}
               className={({ isActive }) => `nav-link${isActive ? ' active' : ''}`}
             >
-              {item.label}
+              <Icon />
+              {label}
             </NavLink>
           ))}
         </nav>
@@ -52,8 +58,11 @@ export function AdminLayout() {
         <div className="header-actions">
           {user ? (
             <>
-              <span className="small muted nowrap user-name" title={user.email}>
-                {user.name}
+              <span className="user-chip" title={user.email}>
+                <span className="user-chip-avatar" aria-hidden="true">
+                  <PersonIcon />
+                </span>
+                <span className="user-chip-name nowrap">{user.name}</span>
               </span>
               <button
                 type="button"
@@ -62,7 +71,7 @@ export function AdminLayout() {
                 aria-label="Toggle theme"
                 title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}
               >
-                {theme === 'dark' ? '☀' : '🌙'}
+                {theme === 'dark' ? <SunIcon /> : <MoonIcon />}
               </button>
               <button
                 type="button"

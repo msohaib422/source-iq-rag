@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Alert } from '../components/Alert';
+import { EyeIcon, EyeOffIcon, MoonIcon, SunIcon } from '../components/icons';
 import { Spinner } from '../components/Spinner';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
@@ -93,14 +94,20 @@ export function SettingsPage() {
             className={`btn btn-sm${theme === 'light' ? ' btn-primary' : ''}`}
             onClick={() => setTheme('light')}
           >
-            ☀ Light
+            <span className="btn-ico">
+              <SunIcon />
+            </span>
+            Light
           </button>
           <button
             type="button"
             className={`btn btn-sm${theme === 'dark' ? ' btn-primary' : ''}`}
             onClick={() => setTheme('dark')}
           >
-            🌙 Dark
+            <span className="btn-ico">
+              <MoonIcon />
+            </span>
+            Dark
           </button>
         </div>
       </div>
@@ -160,8 +167,8 @@ export function SettingsPage() {
                 onChange={(e) => setCurrentPassword(e.target.value)}
                 disabled={passwordBusy}
               />
-              <button type="button" className="btn btn-sm" onClick={() => setShowCurrent((v) => !v)}>
-                {showCurrent ? '🙈' : '👁'}
+              <button type="button" className="btn btn-sm" onClick={() => setShowCurrent((v) => !v)} aria-label={showCurrent ? 'Hide current password' : 'Show current password'}>
+                <span className="btn-ico">{showCurrent ? <EyeOffIcon /> : <EyeIcon />}</span>
               </button>
             </div>
           </div>
@@ -176,8 +183,8 @@ export function SettingsPage() {
                 onChange={(e) => setNewPassword(e.target.value)}
                 disabled={passwordBusy}
               />
-              <button type="button" className="btn btn-sm" onClick={() => setShowNew((v) => !v)}>
-                {showNew ? '🙈' : '👁'}
+              <button type="button" className="btn btn-sm" onClick={() => setShowNew((v) => !v)} aria-label={showNew ? 'Hide new password' : 'Show new password'}>
+                <span className="btn-ico">{showNew ? <EyeOffIcon /> : <EyeIcon />}</span>
               </button>
             </div>
           </div>
@@ -192,8 +199,8 @@ export function SettingsPage() {
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 disabled={passwordBusy}
               />
-              <button type="button" className="btn btn-sm" onClick={() => setShowConfirm((v) => !v)}>
-                {showConfirm ? '🙈' : '👁'}
+              <button type="button" className="btn btn-sm" onClick={() => setShowConfirm((v) => !v)} aria-label={showConfirm ? 'Hide confirmed password' : 'Show confirmed password'}>
+                <span className="btn-ico">{showConfirm ? <EyeOffIcon /> : <EyeIcon />}</span>
               </button>
             </div>
           </div>
