@@ -38,8 +38,19 @@
  * never a silent fallback.
  */
 import path from 'node:path';
+import fs from 'node:fs/promises';
 import { env as hfEnv, AutoModel, AutoTokenizer } from '@huggingface/transformers';
 import { env } from '../config/env.js';
+
+// Silence the noisy, harmless warning Transformers.js emits while streaming a
+// file whose response lacks a Content-Length header. The download still
+// completes; the message only clutters boot output ("come again and again").
+const originalWarn = console.warn.bind(console);
+console.warn = (...args: unknown[]) => {
+  const msg = args.map((a) => (typeof a === 'string' ? a : String(a))).join(' ');
+  if (msg.includes('Unable to determine content-length from response headers')) return;
+  originalWarn(...args);
+};
 
 export const EMBEDDING_DIMENSIONS = env.EMBEDDING_DIMENSIONS;
 export const MODEL_ID = env.EMBEDDING_MODEL_ID;
@@ -84,9 +95,51 @@ function configureHfEnv() {
  * Safe to call repeatedly: the underlying promise is memoised so weights are
  * loaded exactly once per process.
  */
+/** Absolute path of the cached ONNX weights for this model id. */
+export function modelOnnxPath(): string {
+  return path.join(CACHE_DIR, ...MODEL_ID.split('/'), 'onnx', 'model.onnx');
+}
+
+/** Minimum plausible size (bytes) for a complete bge-small ONNX file. */
+const MIN_MODEL_BYTES = 100 * 1024 * 1024;
+
+/** Remove a partial/corrupt cached model file so it can be re-fetched. */
+async function invalidateModelCache(): Promise<void> {
+  const p = modelOnnxPath();
+  try {
+    await fs.unlink(p);
+  } catch {
+    // File may not exist; nothing to do.
+  }
+}
+
+/** Delete the cached file if it is missing or implausibly small. */
+export async function ensureModelFileHealthy(): Promise<void> {
+  const p = modelOnnxPath();
+  try {
+    const stat = await fs.stat(p);
+    if (stat.size < MIN_MODEL_BYTES) {
+      await fs.unlink(p);
+    }
+  } catch {
+    // Missing file is fine - Transformers.js will download it.
+  }
+}
+
 export async function loadEmbeddingModel(onProgress?: ProgressFn): Promise<void> {
-  await getTokenizer(onProgress);
-  await getModel(onProgress);
+  await ensureModelFileHealthy();
+  try {
+    await getTokenizer(onProgress);
+    await getModel(onProgress);
+  } catch (err) {
+    // A corrupt/partial cache entry is the usual cause of "Protobuf parsing
+    // failed" on every boot. Drop it and retry the load once.
+    await invalidateModelCache();
+    _resetEmbeddingCache();
+    await ensureModelFileHealthy();
+    await getTokenizer(onProgress);
+    await getModel(onProgress);
+  }
 }
 
 async function getTokenizer(onProgress?: ProgressFn) {
