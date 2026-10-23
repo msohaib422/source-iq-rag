@@ -4,6 +4,7 @@ import { useSearchParams } from 'react-router-dom';
 import { api, ApiError, streamChat } from '../api/client';
 import type { ChatMessage } from '../api/types';
 import { Alert } from '../components/Alert';
+import { MessageAvatar } from '../components/MessageAvatar';
 import { Spinner } from '../components/Spinner';
 import { useAuth } from '../context/AuthContext';
 import { useAsync } from '../hooks';
@@ -217,9 +218,7 @@ export function ChatPage() {
                 className={`msg msg-${message.role}`}
                 data-testid={`message-${message.role}`}
               >
-                <div className="msg-avatar" aria-hidden="true">
-                  {message.role === 'user' ? 'You' : 'AI'}
-                </div>
+                <MessageAvatar role={message.role} />
                 <div className="msg-body">
                   <div className="msg-role">{message.role === 'user' ? 'You' : 'SourceIQ'}</div>
                   {message.role === 'user' ? (
@@ -235,9 +234,7 @@ export function ChatPage() {
 
             {streaming ? (
               <div className="msg msg-assistant" data-testid="message-streaming">
-                <div className="msg-avatar" aria-hidden="true">
-                  AI
-                </div>
+                <MessageAvatar role="assistant" />
                 <div className="msg-body">
                   <div className="msg-role">SourceIQ</div>
                   {streamingAnswer ? (

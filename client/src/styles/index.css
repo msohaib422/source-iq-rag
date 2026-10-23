@@ -663,14 +663,28 @@ a.doc-title:hover { color: var(--text); text-decoration: none; }
 }
 
 .msg { display: flex; gap: 0.7rem; max-width: 100%; }
+/* Circular role avatars beside every message: 34 px on desktop, with the
+   glyph drawing through `currentColor` so each role keeps its own colour. */
 .msg-avatar {
-  width: 30px; height: 30px; flex-shrink: 0;
-  border-radius: 9px;
+  width: 34px; height: 34px; flex-shrink: 0;
+  border-radius: 50%;
   display: grid; place-items: center;
-  font-size: 0.64rem; font-weight: 800;
+  border: 1px solid var(--border);
 }
-.msg-user .msg-avatar { background: color-mix(in srgb, var(--brand) 22%, transparent); color: var(--brand-bright); order: 2; }
-.msg-assistant .msg-avatar { background: color-mix(in srgb, var(--accent) 22%, transparent); color: var(--accent); }
+.msg-avatar-icon { width: 18px; height: 18px; display: block; }
+.msg-user .msg-avatar {
+  background: color-mix(in srgb, var(--brand) 24%, transparent);
+  color: var(--brand-bright);
+  border-color: color-mix(in srgb, var(--brand) 32%, transparent);
+  order: 2;
+}
+/* The assistant carries the SourceIQ brand mark (brand→accent gradient, white
+   glyph) so the bot is unmistakable next to the tinted user avatar. */
+.msg-assistant .msg-avatar {
+  background: linear-gradient(135deg, var(--brand), var(--accent));
+  color: #fff;
+  border-color: transparent;
+}
 
 /* The question sits in a tinted bubble on the right, the answer reads as a
    document column on the left — no other decoration is needed to tell them
@@ -974,6 +988,11 @@ kbd {
 
   .chat-messages { padding: 0.9rem; }
   .chat-thread { gap: 1.1rem; }
+  /* Tighter, but still visible: avatars scale down and the column spacing
+     shrinks so message text keeps its width on small screens. */
+  .msg { gap: 0.55rem; }
+  .msg-avatar { width: 28px; height: 28px; }
+  .msg-avatar-icon { width: 15px; height: 15px; }
   .chat-composer { padding: 0.65rem; }
   /* Too narrow for a side-by-side field and button: stack them instead. */
   .composer-row { flex-direction: column; align-items: stretch; }
