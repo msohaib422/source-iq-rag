@@ -4,6 +4,7 @@ import { api, ApiError } from '../api/client';
 import type { DocumentStatus } from '../api/types';
 import { Alert } from '../components/Alert';
 import { ConfirmDialog } from '../components/Modal';
+import { DocumentIcon } from '../components/icons';
 import { Spinner } from '../components/Spinner';
 import { StatusBadge } from '../components/StatusBadge';
 import { UploadZone } from '../components/UploadZone';
@@ -128,8 +129,8 @@ export function DocumentsPage() {
           </Alert>
         ) : list.length === 0 ? (
           <div className="center-state">
-            <div style={{ fontSize: '2rem', opacity: 0.5 }} aria-hidden="true">
-              📚
+            <div className="empty-ico" aria-hidden="true">
+              <DocumentIcon />
             </div>
             <p>
               {search || status !== 'all'

@@ -103,6 +103,36 @@ export class MemoryStore implements Store {
     return null;
   }
 
+  async updateUser(
+    id: string,
+    patch: Partial<Pick<UserRecord, 'name' | 'email' | 'passwordHash'>>,
+  ): Promise<UserRecord | null> {
+    let currentEmail: string | null = null;
+    for (const [email, user] of this.db.users) {
+      if (user.id === id) {
+        currentEmail = email;
+        break;
+      }
+    }
+    if (!currentEmail) return null;
+    const user = this.db.users.get(currentEmail)!;
+
+    if (patch.email !== undefined && patch.email !== user.email) {
+      const nextEmail = patch.email.toLowerCase();
+      if (this.db.users.has(nextEmail)) {
+        const err = new Error('E11000 duplicate key error collection: users index: email_1') as Error & { code?: number };
+        err.code = 11000;
+        throw err;
+      }
+      this.db.users.delete(currentEmail);
+      user.email = nextEmail;
+      this.db.users.set(nextEmail, user);
+    }
+    if (patch.name !== undefined) user.name = patch.name;
+    if (patch.passwordHash !== undefined) user.passwordHash = patch.passwordHash;
+    return { ...user };
+  }
+
   // ---- documents ----
 
   async createDocument(input: CreateDocumentInput): Promise<DocumentRecord> {

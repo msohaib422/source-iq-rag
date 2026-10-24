@@ -1,25 +1,40 @@
 import { Link } from 'react-router-dom';
+import type { ReactNode } from 'react';
 import { api } from '../api/client';
 import { Alert } from '../components/Alert';
+import { BookIcon, DocumentIcon, InboxIcon, LayersIcon } from '../components/icons';
 import { Spinner } from '../components/Spinner';
 import { StatusBadge } from '../components/StatusBadge';
 import { useAsync } from '../hooks';
 import { useAuth } from '../context/AuthContext';
 
 /**
- * Informational statistic: an eyebrow label, the value, and an optional
- * supporting note. These cards are deliberately not interactive — the numbers
- * are explained and managed on their own pages (Documents, Queries), which is
- * where the navigation links live. The note line keeps its height even when
- * empty so all four values sit on the same baseline.
+ * Informational statistic: an eyebrow label with a circular accent tile, the
+ * value, and an optional supporting note. These cards are deliberately not
+ * interactive — the numbers are explained and managed on their own pages
+ * (Documents, Queries), which is where the navigation links live. The note
+ * line keeps its height even when empty so all four values sit on the same
+ * baseline.
  */
-function Stat({ value, label, hint }: { value: string | number; label: string; hint?: string }) {
+function Stat({
+  value,
+  label,
+  hint,
+  icon,
+}: {
+  value: string | number;
+  label: string;
+  hint?: string;
+  icon: ReactNode;
+}) {
   // Counts of five digits or more shrink so they stay comfortable in the card.
   const tight = String(value).length >= 5;
   return (
     <div className="card stat-card">
       <span className="stat-label">
-        <span className="stat-dot" aria-hidden="true" />
+        <span className="stat-ico" aria-hidden="true">
+          {icon}
+        </span>
         {label}
       </span>
       <span className={`stat-value${tight ? ' stat-value-tight' : ''}`}>{value}</span>
@@ -71,10 +86,10 @@ export function DashboardPage() {
         </Alert>
       ) : (
         <div className="stat-grid mb">
-          <Stat value={stats.data?.documents ?? 0} label="Documents" />
-          <Stat value={stats.data?.chunks ?? 0} label="Indexed chunks" hint="384-dim vectors" />
-          <Stat value={stats.data?.pages ?? 0} label="Pages" />
-          <Stat value={stats.data?.queries ?? 0} label="Queries" hint="Unanswered, pending review" />
+          <Stat value={stats.data?.documents ?? 0} label="Documents" icon={<DocumentIcon />} />
+          <Stat value={stats.data?.chunks ?? 0} label="Indexed chunks" hint="384-dim vectors" icon={<LayersIcon />} />
+          <Stat value={stats.data?.pages ?? 0} label="Pages" icon={<BookIcon />} />
+          <Stat value={stats.data?.queries ?? 0} label="Queries" hint="Unanswered, pending review" icon={<InboxIcon />} />
         </div>
       )}
 

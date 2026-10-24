@@ -289,6 +289,19 @@ export class MongoStore implements Store {
     return doc ? mapUser(doc as Doc) : null;
   }
 
+  async updateUser(
+    id: string,
+    patch: Partial<Pick<UserRecord, 'name' | 'email' | 'passwordHash'>>,
+  ): Promise<UserRecord | null> {
+    if (!mongoose.isValidObjectId(id)) return null;
+    const allowed: Record<string, unknown> = {};
+    if (patch.name !== undefined) allowed.name = patch.name;
+    if (patch.email !== undefined) allowed.email = patch.email.toLowerCase();
+    if (patch.passwordHash !== undefined) allowed.passwordHash = patch.passwordHash;
+    const doc = await this.User.findByIdAndUpdate(objectId(id), { $set: allowed }, { new: true }).lean().exec();
+    return doc ? mapUser(doc as Doc) : null;
+  }
+
   async createDocument(input: CreateDocumentInput): Promise<DocumentRecord> {
     const doc = await this.Document.create({ ...input, status: 'pending' });
     return mapDocument(doc as Doc);

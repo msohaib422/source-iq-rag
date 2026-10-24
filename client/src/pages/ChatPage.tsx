@@ -1,64 +1,26 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import ReactMarkdown from 'react-markdown';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { api, ApiError, streamChat } from '../api/client';
-import type { Citation, ChatMessage } from '../api/types';
+import type { ChatMessage } from '../api/types';
 import { Alert } from '../components/Alert';
-import { CitationList } from '../components/CitationList';
+import { MessageAvatar } from '../components/MessageAvatar';
 import { Spinner } from '../components/Spinner';
 import { useAuth } from '../context/AuthContext';
 import { useAsync } from '../hooks';
 
-/** Render the answer, turning [n] markers into interactive citation chips. */
-function AnswerBody({ content, onCite }: { content: string; onCite: (index: number) => void }) {
+/** Render the answer as markdown (sources and their numbering are not shown in chat). */
+function AnswerBody({ content }: { content: string }) {
+  const cleaned = content.replace(/\[\d{1,2}\]/g, '');
   return (
     <div className="msg-content">
-      <ReactMarkdown
-        components={{
-          p: ({ children }) => <p>{renderWithCitations(children, onCite)}</p>,
-          li: ({ children }) => <li>{renderWithCitations(children, onCite)}</li>,
-        }}
-      >
-        {content}
-      </ReactMarkdown>
+      <ReactMarkdown>{cleaned}</ReactMarkdown>
     </div>
   );
 }
 
-/**
- * react-markdown renders text nodes; we walk the React children and swap any
- * `[n]` string for a clickable chip.
- */
-function renderWithCitations(children: React.ReactNode, onCite: (index: number) => void): React.ReactNode {
-  return Array.isArray(children)
-    ? children.map((child, i) => (typeof child === 'string' ? citeSplit(child, onCite, i) : child))
-    : typeof children === 'string'
-      ? citeSplit(children, onCite, 0)
-      : children;
-}
-
-function citeSplit(text: string, onCite: (index: number) => void, keyOffset: number): React.ReactNode {
-  return text.split(/(\[\d{1,2}\])/g).map((part, i) => {
-    const match = /^\[(\d{1,2})\]$/.exec(part);
-    if (!match) return <span key={`${keyOffset}-${i}`}>{part}</span>;
-    const index = Number(match[1]) - 1;
-    return (
-      <button
-        key={`${keyOffset}-${i}-cite`}
-        type="button"
-        className="cite-token"
-        onClick={() => onCite(index)}
-        title={`Jump to source ${index + 1}`}
-      >
-        {index + 1}
-      </button>
-    );
-  });
-}
-
 export function ChatPage() {
   const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
   const { user } = useAuth();
   // The admin uses the same chat to test the RAG system, and additionally gets
   // the library scope picker, source links and retrieval diagnostics. Anonymous
@@ -68,7 +30,6 @@ export function ChatPage() {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [question, setQuestion] = useState('');
   const [streamingAnswer, setStreamingAnswer] = useState('');
-  const [streamCitations, setStreamCitations] = useState<Citation[]>([]);
   const [sending, setSending] = useState(false);
   /**
    * True until the answer has been committed to `messages` (or the stream
@@ -82,7 +43,6 @@ export function ChatPage() {
    */
   const [streaming, setStreaming] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [activeCitationIndex, setActiveCitationIndex] = useState<number | null>(null);
   const [selectedDocumentIds, setSelectedDocumentIds] = useState<string[]>([]);
 
   const abortRef = useRef<AbortController | null>(null);
@@ -113,8 +73,7 @@ export function ChatPage() {
       setSending(true);
       setStreaming(true);
       setStreamingAnswer('');
-      setStreamCitations([]);
-      setActiveCitationIndex(null);
+
 
       const localUserMessage: ChatMessage = {
         id: `local-${Date.now()}`,
@@ -138,28 +97,23 @@ export function ChatPage() {
             ...(selectedDocumentIds.length ? { documentIds: selectedDocumentIds } : {}),
           },
           {
-            onCitations: (payload) => {
-              setStreamCitations(payload.citations);
-            },
             onDelta: (delta) => {
               accumulated += delta;
               setStreamingAnswer(accumulated);
             },
-            onDone: (payload) => {
+            onDone: () => {
               setMessages((prev) => [
                 ...prev,
                 {
                   id: `assistant-${Date.now()}`,
                   role: 'assistant',
                   content: accumulated,
-                  // The server reports only the passages the answer actually
-                  // referenced; the retrieved set is for live streaming only.
-                  citations: payload.citations,
+                  // Sources are not displayed in chat.
+                  citations: [],
                   createdAt: new Date().toISOString(),
                 },
               ]);
               setStreamingAnswer('');
-              setStreamCitations([]);
               // The answer is in `messages`: stop showing the streaming bubble
               // now, rather than waiting for the response to close.
               setStreaming(false);
@@ -195,16 +149,20 @@ export function ChatPage() {
   }
 
   const readyDocs = documents.data?.documents ?? [];
-  // `activeCitationIndex` is the [n] the reader clicked; `activeCitation` is the
-  // resolved Citation shown in the preview strip.
-  const activeCitation =
-    activeCitationIndex !== null ? (streamCitations[activeCitationIndex] ?? null) : null;
-
   return (
     <div className={`chat-layout${isAdmin ? '' : ' chat-layout-full'}`}>
       {isAdmin ? (
         <aside className="chat-sidebar">
-          <div className="card">
+          <div className="card chat-side-card">
+            <div className="chat-side-head">
+              <span className="chat-side-mark" aria-hidden="true">
+                S
+              </span>
+              <div>
+                <div className="chat-side-name">SourceIQ</div>
+                <div className="chat-side-sub faint">Answers cite your documents</div>
+              </div>
+            </div>
             <h3 className="panel-label">Scope</h3>
             {documents.loading ? (
               <Spinner />
@@ -269,32 +227,14 @@ export function ChatPage() {
                 className={`msg msg-${message.role}`}
                 data-testid={`message-${message.role}`}
               >
-                <div className="msg-avatar" aria-hidden="true">
-                  {message.role === 'user' ? 'You' : 'AI'}
-                </div>
+                <MessageAvatar role={message.role} />
                 <div className="msg-body">
                   <div className="msg-role">{message.role === 'user' ? 'You' : 'SourceIQ'}</div>
                   {message.role === 'user' ? (
                     <div className="msg-content">{message.content}</div>
                   ) : (
                     <>
-                      <AnswerBody
-                        content={message.content}
-                        onCite={(index) => {
-                          setStreamCitations(message.citations);
-                          setActiveCitationIndex(index);
-                        }}
-                      />
-                      <CitationList
-                        citations={message.citations}
-                        showDiagnostics={isAdmin}
-                        {...(isAdmin
-                          ? {
-                              onOpenDocument: (documentId: string, chunkId: string) =>
-                                navigate(`/admin/documents/${documentId}?chunk=${encodeURIComponent(chunkId)}`),
-                            }
-                          : {})}
-                      />
+                      <AnswerBody content={message.content} />
                     </>
                   )}
                 </div>
@@ -303,9 +243,7 @@ export function ChatPage() {
 
             {streaming ? (
               <div className="msg msg-assistant" data-testid="message-streaming">
-                <div className="msg-avatar" aria-hidden="true">
-                  AI
-                </div>
+                <MessageAvatar role="assistant" />
                 <div className="msg-body">
                   <div className="msg-role">SourceIQ</div>
                   {streamingAnswer ? (
@@ -316,11 +254,7 @@ export function ChatPage() {
                           which changed the answer's layout (paragraph margins,
                           citation chips) after it had appeared, while the
                           auto-scroll animation was still chasing the old height. */}
-                      <AnswerBody
-                        content={streamingAnswer}
-                        onCite={(index) => setActiveCitationIndex(index)}
-                      />
-                      <CitationList citations={streamCitations} showDiagnostics={isAdmin} />
+                      <AnswerBody content={streamingAnswer} />
                     </>
                   ) : (
                     <div className="row">
@@ -336,26 +270,6 @@ export function ChatPage() {
         </div>
 
         <form className="chat-composer" onSubmit={onSubmit}>
-          {activeCitation ? (
-            <div className="alert alert-info">
-              <span aria-hidden="true">❝</span>
-              <div className="alert-body small">
-                <strong>{activeCitation.documentTitle}</strong>
-                {activeCitation.page ? ` · page ${activeCitation.page}` : ''}
-                {isAdmin ? ` · similarity ${activeCitation.score.toFixed(3)}` : ''}
-                <div className="citation-snippet composer-preview">{activeCitation.snippet}</div>
-              </div>
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm"
-                onClick={() => setActiveCitationIndex(null)}
-                aria-label="Close source preview"
-              >
-                ✕
-              </button>
-            </div>
-          ) : null}
-
           <div className="composer-row">
             <textarea
               className="textarea"

@@ -10,6 +10,9 @@ export function useAsync<T>(loader: () => Promise<T>, deps: unknown[] = []) {
   const mounted = useRef(true);
   const loaderRef = useRef(loader);
   loaderRef.current = loader;
+  // Tracks the most recently started request so stale (out-of-order) responses
+  // cannot overwrite the result of a newer one (e.g. rapid search typing).
+  const latestRunId = useRef(0);
 
   useEffect(() => {
     mounted.current = true;
@@ -19,15 +22,19 @@ export function useAsync<T>(loader: () => Promise<T>, deps: unknown[] = []) {
   }, []);
 
   const run = useCallback(async (quiet = false) => {
+    const runId = ++latestRunId.current;
     if (!quiet) setLoading(true);
     setError(null);
     try {
       const result = await loaderRef.current();
+      // Ignore results from superseded requests.
+      if (runId !== latestRunId.current) return;
       if (mounted.current) setData(result);
     } catch (err) {
+      if (runId !== latestRunId.current) return;
       if (mounted.current) setError((err as Error)?.message ?? 'Something went wrong.');
     } finally {
-      if (mounted.current) setLoading(false);
+      if (runId === latestRunId.current && mounted.current) setLoading(false);
     }
   }, []);
 
