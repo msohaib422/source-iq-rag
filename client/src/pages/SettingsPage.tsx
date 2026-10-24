@@ -126,6 +126,7 @@ export function SettingsPage() {
               id="settings-name"
               className="input"
               type="text"
+              placeholder="Enter admin name"
               value={name}
               onChange={(e) => setName(e.target.value)}
               disabled={profileBusy}
@@ -137,6 +138,7 @@ export function SettingsPage() {
               id="settings-email"
               className="input"
               type="email"
+              placeholder="Enter email address"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               disabled={profileBusy}
@@ -163,6 +165,7 @@ export function SettingsPage() {
                 id="settings-current"
                 className="input"
                 type={showCurrent ? 'text' : 'password'}
+                placeholder="Enter current password"
                 value={currentPassword}
                 onChange={(e) => setCurrentPassword(e.target.value)}
                 disabled={passwordBusy}
@@ -179,6 +182,7 @@ export function SettingsPage() {
                 id="settings-new"
                 className="input"
                 type={showNew ? 'text' : 'password'}
+                placeholder="Enter new password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 disabled={passwordBusy}
@@ -195,6 +199,7 @@ export function SettingsPage() {
                 id="settings-confirm"
                 className="input"
                 type={showConfirm ? 'text' : 'password'}
+                placeholder="Confirm new password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 disabled={passwordBusy}
