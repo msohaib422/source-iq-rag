@@ -934,6 +934,9 @@ a.doc-title:hover { color: var(--text); text-decoration: none; }
   border-radius: 16px;
   box-shadow: var(--shadow-sm);
   transition: border-color 0.15s, box-shadow 0.15s;
+  max-width: var(--thread-max);
+  margin: 0 auto;
+  width: 100%;
 }
 .composer-row:focus-within {
   border-color: color-mix(in srgb, var(--brand) 55%, var(--border-strong));

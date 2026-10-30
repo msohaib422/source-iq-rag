@@ -9,6 +9,7 @@
  * automated tests.
  */
 import { LlmConfigurationError, type LlmCompletionRequest, type LlmProvider, type LlmProviderInfo } from './types.js';
+import { FALLBACK_REPLY } from '../fallback.js';
 
 const STOP_WORDS = new Set([
   'a', 'an', 'the', 'is', 'are', 'was', 'were', 'be', 'been', 'being', 'of', 'in', 'on', 'at', 'to', 'for', 'with',
@@ -91,7 +92,7 @@ export class MockExtractiveProvider implements LlmProvider {
   private buildAnswer(request: LlmCompletionRequest): string {
     const { question, blocks } = parseContext(request.messages);
     if (!blocks.length) {
-      return 'I could not find any indexed sources to answer from. Upload a PDF first, then ask your question again.';
+      return FALLBACK_REPLY;
     }
 
     const qTokens = new Set(tokenize(question));
@@ -118,13 +119,9 @@ export class MockExtractiveProvider implements LlmProvider {
       .slice(0, 3);
 
     if (!scored.length) {
-      // Grounding: the retrieved passages do not answer this question, so say
-      // so. Echoing the nearest passages would present them as evidence for a
-      // claim they do not support.
-      return (
-        'I could not find an answer to that question in the retrieved passages, ' +
-        'so I cannot answer it without guessing. Please provide a document that covers it, or rephrase your question.'
-      );
+      // Grounding: the retrieved passages do not answer this question, so use
+      // the friendly fallback rather than a technical refusal.
+      return FALLBACK_REPLY;
     }
 
     const body = scored

@@ -343,7 +343,7 @@ describe('intent handling and strict grounding', () => {
     // Retrieval may return topically weak passages; the answer must still be a
     // transparent refusal with no citation attached to the claim.
     expect(res.body.citations).toEqual([]);
-    expect(res.body.answer).toMatch(/could not find/i);
+    expect(res.body.answer).toMatch(/I'd be happy to help/i);
     // No invented deadline.
     expect(res.body.answer).not.toMatch(/\b(january|february|march|april|may|june|july|august|september|october|november|december)\b/i);
     expect(res.body.answer).not.toMatch(/\b\d{4}-\d{2}-\d{2}\b/);
@@ -357,7 +357,7 @@ describe('intent handling and strict grounding', () => {
 
     expect(res.body.retrievedCount).toBe(0);
     expect(res.body.citations).toEqual([]);
-    expect(res.body.answer).toMatch(/couldn't find/i);
+    expect(res.body.answer).toMatch(/I'd be happy to help/i);
     expect(res.body.answer).not.toMatch(/England|Brazil/i);
   });
 
@@ -423,7 +423,7 @@ describe('intent handling and strict grounding', () => {
 
     for (const [question, expected] of [
       ['Hi', /hello|hi there/i],
-      ["What is the university's scholarship deadline?", /could not find/i],
+      ["What is the university's scholarship deadline?", /I'd be happy to help/i],
     ] as const) {
       const res = await request(h.app)
         .post('/api/chat/stream')

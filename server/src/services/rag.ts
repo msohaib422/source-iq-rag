@@ -18,14 +18,15 @@ import type { ChunkRecord, Citation, ScoredChunk } from '../types/domain.js';
 import { embedQuery } from './embeddings.js';
 import { getLlmProvider, type LlmProvider } from './llm/index.js';
 import { applyCleanResponseFormatting, CleanResponseFormatter } from './formatting.js';
+import { FALLBACK_REPLY } from './fallback.js';
 
 export const SYSTEM_PROMPT = [
   'You are SourceIQ, a careful research assistant that answers questions strictly from the numbered context passages supplied by the user.',
   '',
   'Grounding rules:',
   '1. Use only information that appears in the context passages. Never use outside or pretrained knowledge to fill a gap.',
-  '2. If the passages do not contain the answer, say plainly that you could not find it in the available knowledge sources. Never guess a date, figure, name, policy or procedure.',
-  '3. If the passages are off-topic, ambiguous or too vague to settle the question, say so instead of forcing an answer.',
+  '2. If the passages do not contain the answer, respond with exactly: "I\'d be happy to help! This information isn\'t available just yet, but stay tuned for future updates. Could you share a little more detail about what you\'re looking for?" Never guess a date, figure, name, policy or procedure.',
+  '3. If the passages are off-topic, ambiguous or too vague to settle the question, respond with the same friendly message instead of forcing an answer.',
   '4. If only part of a question is supported, answer the supported part and state clearly which part you could not verify.',
   '5. Be concise and factual. Quote figures, names and dates exactly as written in the passages.',
   '',
@@ -196,11 +197,24 @@ export const CLARIFY_REPLY =
   "I'm not sure what you're asking about - could you rephrase your question? " +
   'I answer using the information available in the knowledge sources.';
 
-function noSourcesReply(question: string): string {
-  const topic = question.trim().replace(/\s+/g, ' ').slice(0, 160);
+export { FALLBACK_REPLY };
+
+/** Detect technical/generic fallback refusals so they can be normalized. */
+function isTechnicalFallback(answer: string): boolean {
+  const text = answer.trim();
+  if (!text) return true;
+  if (text.length > 400) return false;
+  const lower = text.toLowerCase();
   return (
-    `I couldn't find information about "${topic}" in the available knowledge sources, ` +
-    "so I can't answer it without guessing. Please provide a relevant document or rephrase your question."
+    lower.includes('could not find') ||
+    lower.includes('provided context') ||
+    lower.includes('context passages') ||
+    lower.includes('no matching passages') ||
+    lower.includes('indexed sources') ||
+    lower.includes('knowledge sources') ||
+    lower.includes('insufficient information') ||
+    lower.includes('not enough information') ||
+    lower.includes('no relevant information')
   );
 }
 
@@ -357,7 +371,7 @@ export async function answerQuestion(
   // Nothing retrieved: answer deterministically rather than asking the model to
   // fill the gap from its pretrained knowledge.
   if (!chunks.length) {
-    return directResult(withGreeting(noSourcesReply(question), intent.greeting, options.question), provider);
+    return directResult(withGreeting(FALLBACK_REPLY, intent.greeting, options.question), provider);
   }
 
   const { prompt } = buildPrompt(question, chunks);
@@ -368,10 +382,14 @@ export async function answerQuestion(
     messages: [{ role: 'user', content: prompt }],
   });
 
+  // Normalize any technical/generic refusal the model may have produced into
+  // the friendly fallback wording, so users never see retrieval internals.
+  const answerText = isTechnicalFallback(raw) ? FALLBACK_REPLY : raw;
+
   return {
     // The raw answer stays the alignment input; the rule applies for display.
-    answer: withGreeting(applyCleanResponseFormatting(raw), intent.greeting, options.question),
-    citations: alignCitationsToAnswer(raw, citations),
+    answer: withGreeting(applyCleanResponseFormatting(answerText), intent.greeting, options.question),
+    citations: isTechnicalFallback(raw) ? [] : alignCitationsToAnswer(raw, citations),
     retrievedCount: chunks.length,
     usedProvider: provider.name,
     usedModel: provider.model,
@@ -408,7 +426,7 @@ export async function* streamAnswer(
   const { chunks, question } = await retrieveContext(store, options);
 
   if (!chunks.length) {
-    yield* fixed(withGreeting(noSourcesReply(question), intent.greeting, options.question));
+    yield* fixed(withGreeting(FALLBACK_REPLY, intent.greeting, options.question));
     return;
   }
 

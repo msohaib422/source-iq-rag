@@ -177,6 +177,6 @@ describe('MockExtractiveProvider', () => {
     const answer = await provider.complete({
       messages: [{ role: 'user', content: 'Question: anything?\n\nContext:\n(no matching passages)' }],
     });
-    expect(answer).toContain('could not find any indexed sources');
+    expect(answer).toContain("I'd be happy to help");
   });
 });
