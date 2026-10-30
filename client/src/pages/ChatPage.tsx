@@ -9,12 +9,57 @@ import { Spinner } from '../components/Spinner';
 import { useAuth } from '../context/AuthContext';
 import { useAsync } from '../hooks';
 
+/**
+ * The clean response formatting rule, for the display layer of answers that
+ * were generated (or streamed) before the server applied it itself:
+ *
+ *   - no bracketed citation markers in any style ([1], [1][2], [1, 2], 【1】);
+ *   - no trailing "Sources:" / "References:" style section;
+ *   - no glue artifacts left behind where markers were removed.
+ *
+ * Contract with the server: the pipeline already does this for answers it
+ * returns or streams, this only guards older or non-API answers.
+ */
+
+/** Bracket styles models emit: ASCII [], full-width ［］【】. */
+const CITATION_MARKER =
+  /(?:[\[［【]\s*\d{1,2}\s*[\]］】])+|[\[［【]\s*\d{1,2}(?:\s*[,;]\s*\d{1,2})+\s*[\]］】]|[\[［【]\s*\d{1,2}\s*[-–—]\s*\d{1,2}\s*[\]］】]/g;
+
+/** A standalone section heading: "Sources:", "## References", "- Further reading". */
+const SOURCE_HEADING_LINE =
+  /^[^\S\n]*(?:[#>*•\-]+[^\S\n]*|\d{1,2}\.[^\S\n]*)*(?:\*\*|__|\*|_)?(?:sources?|references?|reference list|bibliography|works? cited|further reading|citations?|cited sources)(?:\*\*|__|\*|_)?[:,#*_\-—>\s]*$/i;
+
+function stripTrailingSourceSection(text: string): string {
+  const lines = text.split('\n');
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const line = (lines[i] ?? '').trim();
+    if (!line) continue;
+    if (SOURCE_HEADING_LINE.test(line)) return lines.slice(0, i).join('\n');
+    const bare = line.replace(CITATION_MARKER, '').trim();
+    if (bare && bare !== line && SOURCE_HEADING_LINE.test(bare)) return lines.slice(0, i).join('\n');
+  }
+  return text;
+}
+
+/** Clean a full answer (streaming previews included) for display. */
+function cleanAnswerForDisplay(answer: string): string {
+  let cleaned = stripTrailingSourceSection(answer).replace(CITATION_MARKER, '');
+  cleaned = cleaned
+    .replace(/\(\s*[,;.]?\s*\)/g, '')
+    .replace(/([,;:.!?])(?:\s*\1)+/g, '$1')
+    .replace(/[^\S\n]+([,.;:!?])/g, '$1')
+    .replace(/([^\s()[\]])\s+\)/g, '$1)')
+    .replace(/[^\S\n]{2,}/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  return cleaned || answer.trim();
+}
+
 /** Render the answer as markdown (sources and their numbering are not shown in chat). */
 function AnswerBody({ content }: { content: string }) {
-  const cleaned = content.replace(/\[\d{1,2}\]/g, '');
   return (
     <div className="msg-content">
-      <ReactMarkdown>{cleaned}</ReactMarkdown>
+      <ReactMarkdown>{cleanAnswerForDisplay(content)}</ReactMarkdown>
     </div>
   );
 }

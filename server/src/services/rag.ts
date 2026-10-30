@@ -17,6 +17,7 @@ import type { Store } from '../db/store.js';
 import type { ChunkRecord, Citation, ScoredChunk } from '../types/domain.js';
 import { embedQuery } from './embeddings.js';
 import { getLlmProvider, type LlmProvider } from './llm/index.js';
+import { applyCleanResponseFormatting, CleanResponseFormatter } from './formatting.js';
 
 export const SYSTEM_PROMPT = [
   'You are SourceIQ, a careful research assistant that answers questions strictly from the numbered context passages supplied by the user.',
@@ -31,6 +32,10 @@ export const SYSTEM_PROMPT = [
   'Citation rules:',
   '6. Cite a passage with its bracketed number, e.g. [1] or [2][3], only when that passage actually supports the claim beside it.',
   '7. Never invent a citation number that is not in the context, and never imply a source says something it does not.',
+  '',
+  'Clean response formatting rules:',
+  '8. Write the answer as clean, direct, natural prose in paragraphs. Inline [n] citations from rules 6-7 are fine - the application removes them and renders its own source list - but never narrate them further: no footnote-style labels, no "source 3" or "passage 2" wording, no mention of chunks, relevance scores or context labels, and never state how many sources were used.',
+  '9. Never append a Sources, References, Bibliography, Further Reading, Works Cited or similar section, never list or enumerate sources at the end, and never cluster citations into a pseudo-list such as "x [1], [2] and [3]" - place each [n] directly beside the claim it supports. End the answer after its final sentence.',
 ].join('\n');
 
 export interface RetrieveOptions {
@@ -358,14 +363,15 @@ export async function answerQuestion(
   const { prompt } = buildPrompt(question, chunks);
   const citations = buildCitations(chunks);
 
-  const answer = await provider.complete({
+  const raw = await provider.complete({
     system: SYSTEM_PROMPT,
     messages: [{ role: 'user', content: prompt }],
   });
 
   return {
-    answer: withGreeting(answer, intent.greeting, options.question),
-    citations: alignCitationsToAnswer(answer, citations),
+    // The raw answer stays the alignment input; the rule applies for display.
+    answer: withGreeting(applyCleanResponseFormatting(raw), intent.greeting, options.question),
+    citations: alignCitationsToAnswer(raw, citations),
     retrievedCount: chunks.length,
     usedProvider: provider.name,
     usedModel: provider.model,
@@ -418,10 +424,17 @@ export async function* streamAnswer(
     for (const part of wordGroups(prefix)) yield { type: 'delta', payload: { text: part } };
   }
 
+  // The formatter only decides what is safe to show already; the raw model
+  // output keeps feeding citation alignment below.
+  const formatter = new CleanResponseFormatter();
   for await (const delta of provider.stream({ system: SYSTEM_PROMPT, messages: [{ role: 'user', content: prompt }] })) {
     answer += delta;
-    yield { type: 'delta', payload: { text: delta } };
+    const visible = formatter.push(delta);
+    if (visible) yield { type: 'delta', payload: { text: visible } };
   }
+
+  const visible = formatter.flush();
+  if (visible) yield { type: 'delta', payload: { text: visible } };
 
   yield {
     type: 'done',
