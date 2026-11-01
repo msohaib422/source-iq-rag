@@ -134,3 +134,49 @@ export interface WorkspaceStats {
   ready: number;
   failed: number;
 }
+
+export interface EvaluationRecord {
+  id: string;
+  userId: string;
+  question: string;
+  answer: string;
+  retrievedChunkIds: string[];
+  retrievedDocumentIds: string[];
+  retrievalScores: number[];
+  retrievalQuality: string | null;
+  faithfulnessScore: number | null;
+  answerRelevancyScore: number | null;
+  contextPrecision: number | null;
+  contextRecall: number | null;
+  answerCorrectness: number | null;
+  hallucinationFindings: string[];
+  retryCount: number;
+  selfRagDecisions: string[];
+  cragActions: string[];
+  processingTimeMs: number | null;
+  tokenUsage: number | null;
+  estimatedCost: number | null;
+  mode: 'online' | 'offline';
+  benchmarkId: string | null;
+  createdAt: string;
+}
+
+export interface EvaluationStats {
+  total: number;
+  avgFaithfulness: number | null;
+  avgAnswerRelevancy: number | null;
+  avgContextPrecision: number | null;
+  avgContextRecall: number | null;
+  avgAnswerCorrectness: number | null;
+  retrievalSuccessRate: number | null;
+  hallucinationRate: number | null;
+  avgLatencyMs: number | null;
+  avgRetryCount: number | null;
+  totalTokens: number;
+  estimatedCost: number | null;
+}
+
+export interface EvaluationListResponse {
+  items: EvaluationRecord[];
+  total: number;
+}

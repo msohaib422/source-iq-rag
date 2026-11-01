@@ -13,6 +13,8 @@ import { env } from '../config/env.js';
 import type {
   ChunkRecord,
   DocumentRecord,
+  EvaluationRecord,
+  EvaluationStats,
   QueryRecord,
   QueryRecordStatus,
   ScoredChunk,
@@ -24,6 +26,7 @@ import type {
 import type {
   CreateChunkInput,
   CreateDocumentInput,
+  CreateEvaluationInput,
   CreateUnansweredQueryInput,
   CreateUserInput,
   ListChunksOptions,
@@ -113,6 +116,34 @@ const querySchema = new Schema(
 );
 querySchema.index({ userId: 1, createdAt: -1 });
 
+const evaluationSchema = new Schema(
+  {
+    userId: { type: Schema.Types.ObjectId, required: true, index: true, ref: 'User' },
+    question: { type: String, required: true },
+    answer: { type: String, default: '' },
+    retrievedChunkIds: { type: [String], default: [] },
+    retrievedDocumentIds: { type: [String], default: [] },
+    retrievalScores: { type: [Number], default: [] },
+    retrievalQuality: { type: String, default: null },
+    faithfulnessScore: { type: Number, default: null },
+    answerRelevancyScore: { type: Number, default: null },
+    contextPrecision: { type: Number, default: null },
+    contextRecall: { type: Number, default: null },
+    answerCorrectness: { type: Number, default: null },
+    hallucinationFindings: { type: [String], default: [] },
+    retryCount: { type: Number, default: 0 },
+    selfRagDecisions: { type: [String], default: [] },
+    cragActions: { type: [String], default: [] },
+    processingTimeMs: { type: Number, default: null },
+    tokenUsage: { type: Number, default: null },
+    estimatedCost: { type: Number, default: null },
+    mode: { type: String, enum: ['online', 'offline'], default: 'online' },
+    benchmarkId: { type: String, default: null },
+  },
+  { timestamps: true, collection: 'evaluations' },
+);
+evaluationSchema.index({ userId: 1, createdAt: -1 });
+
 // ---------------------------------------------------------------------------
 // Mappers
 // ---------------------------------------------------------------------------
@@ -179,6 +210,34 @@ function mapQuery(raw: Doc): QueryRecord {
   };
 }
 
+function mapEvaluation(raw: Doc): EvaluationRecord {
+  return {
+    id: toId(raw._id),
+    userId: toId(raw.userId),
+    question: String(raw.question ?? ''),
+    answer: String(raw.answer ?? ''),
+    retrievedChunkIds: (raw.retrievedChunkIds as string[]) ?? [],
+    retrievedDocumentIds: (raw.retrievedDocumentIds as string[]) ?? [],
+    retrievalScores: (raw.retrievalScores as number[]) ?? [],
+    retrievalQuality: (raw.retrievalQuality as string | null) ?? null,
+    faithfulnessScore: (raw.faithfulnessScore as number | null) ?? null,
+    answerRelevancyScore: (raw.answerRelevancyScore as number | null) ?? null,
+    contextPrecision: (raw.contextPrecision as number | null) ?? null,
+    contextRecall: (raw.contextRecall as number | null) ?? null,
+    answerCorrectness: (raw.answerCorrectness as number | null) ?? null,
+    hallucinationFindings: (raw.hallucinationFindings as string[]) ?? [],
+    retryCount: Number(raw.retryCount ?? 0),
+    selfRagDecisions: (raw.selfRagDecisions as string[]) ?? [],
+    cragActions: (raw.cragActions as string[]) ?? [],
+    processingTimeMs: (raw.processingTimeMs as number | null) ?? null,
+    tokenUsage: (raw.tokenUsage as number | null) ?? null,
+    estimatedCost: (raw.estimatedCost as number | null) ?? null,
+    mode: (raw.mode as 'online' | 'offline') ?? 'online',
+    benchmarkId: (raw.benchmarkId as string | null) ?? null,
+    createdAt: (raw.createdAt as Date) ?? new Date(),
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Store
 // ---------------------------------------------------------------------------
@@ -196,6 +255,7 @@ export class MongoStore implements Store {
   private Document: AnyModel;
   private Chunk: AnyModel;
   private Query: AnyModel;
+  private Evaluation: AnyModel;
 
   private vectorIndexStatus: VectorIndexStatus = {
     backend: 'atlas',
@@ -211,6 +271,7 @@ export class MongoStore implements Store {
     this.Document = mongoose.models.Document ?? mongoose.model('Document', documentSchema);
     this.Chunk = mongoose.models.Chunk ?? mongoose.model('Chunk', chunkSchema);
     this.Query = mongoose.models.UnansweredQuery ?? mongoose.model('UnansweredQuery', querySchema);
+    this.Evaluation = mongoose.models.Evaluation ?? mongoose.model('Evaluation', evaluationSchema);
   }
 
   async init(): Promise<void> {
@@ -236,6 +297,7 @@ export class MongoStore implements Store {
       this.Document.syncIndexes() as unknown as Promise<unknown>,
       this.Chunk.syncIndexes() as unknown as Promise<unknown>,
       this.Query.syncIndexes() as unknown as Promise<unknown>,
+      this.Evaluation.syncIndexes() as unknown as Promise<unknown>,
     ]);
     await this.migrateLegacyEditedQueries();
   }
@@ -489,6 +551,99 @@ export class MongoStore implements Store {
 
     const scored = rows.map((row) => ({ chunk: mapChunk(row), score: Number(row.score ?? 0) }));
     return params.minScore === undefined ? scored : scored.filter((s) => s.score >= params.minScore!);
+  }
+
+  // ---- evaluations ----
+
+  async createEvaluation(input: CreateEvaluationInput): Promise<EvaluationRecord> {
+    const doc = await this.Evaluation.create({
+      userId: input.userId,
+      question: input.question,
+      answer: input.answer,
+      retrievedChunkIds: input.retrievedChunkIds ?? [],
+      retrievedDocumentIds: input.retrievedDocumentIds ?? [],
+      retrievalScores: input.retrievalScores ?? [],
+      retrievalQuality: input.retrievalQuality ?? null,
+      faithfulnessScore: input.faithfulnessScore ?? null,
+      answerRelevancyScore: input.answerRelevancyScore ?? null,
+      contextPrecision: input.contextPrecision ?? null,
+      contextRecall: input.contextRecall ?? null,
+      answerCorrectness: input.answerCorrectness ?? null,
+      hallucinationFindings: input.hallucinationFindings ?? [],
+      retryCount: input.retryCount ?? 0,
+      selfRagDecisions: input.selfRagDecisions ?? [],
+      cragActions: input.cragActions ?? [],
+      processingTimeMs: input.processingTimeMs ?? null,
+      tokenUsage: input.tokenUsage ?? null,
+      estimatedCost: input.estimatedCost ?? null,
+      mode: input.mode ?? 'online',
+      benchmarkId: input.benchmarkId ?? null,
+    });
+    return mapEvaluation(doc as Doc);
+  }
+
+  async listEvaluations(
+    userId: string,
+    options: { limit?: number; skip?: number; mode?: 'online' | 'offline' } = {},
+  ): Promise<{ items: EvaluationRecord[]; total: number }> {
+    if (!mongoose.isValidObjectId(userId)) return { items: [], total: 0 };
+    const limit = options.limit ?? 50;
+    const skip = options.skip ?? 0;
+    const query: Record<string, unknown> = { userId: objectId(userId) };
+    if (options.mode) query.mode = options.mode;
+    const [docs, total] = await Promise.all([
+      this.Evaluation.find(query).sort({ createdAt: -1 }).skip(skip).limit(limit).lean().exec(),
+      this.Evaluation.countDocuments(query),
+    ]);
+    return { items: docs.map((d) => mapEvaluation(d as Doc)), total };
+  }
+
+  async getEvaluation(id: string, userId: string): Promise<EvaluationRecord | null> {
+    if (!mongoose.isValidObjectId(id)) return null;
+    const doc = await this.Evaluation.findOne({ _id: objectId(id), userId: objectId(userId) }).lean().exec();
+    return doc ? mapEvaluation(doc as Doc) : null;
+  }
+
+  async evaluationStats(userId?: string): Promise<EvaluationStats> {
+    const match = userId && mongoose.isValidObjectId(userId) ? { userId: objectId(userId) } : {};
+    const agg = await this.Evaluation.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: 1 },
+          faith: { $avg: '$faithfulnessScore' },
+          rel: { $avg: '$answerRelevancyScore' },
+          cp: { $avg: '$contextPrecision' },
+          cr: { $avg: '$contextRecall' },
+          ac: { $avg: '$answerCorrectness' },
+          lat: { $avg: '$processingTimeMs' },
+          retry: { $avg: '$retryCount' },
+          tokens: { $sum: '$tokenUsage' },
+          cost: { $sum: '$estimatedCost' },
+          correct: { $sum: { $cond: [{ $eq: ['$retrievalQuality', 'CORRECT'] }, 1, 0] } },
+          withChunks: { $sum: { $cond: [{ $gt: [{ $size: { $ifNull: ['$retrievedChunkIds', []] } }, 0] }, 1, 0] } },
+          halluc: { $sum: { $cond: [{ $gt: [{ $size: { $ifNull: ['$hallucinationFindings', []] } }, 0] }, 1, 0] } },
+        },
+      },
+    ]);
+    const r = agg[0] ?? {};
+    const total = r.total ?? 0;
+    const retrievalSuccess = (r.correct ?? 0) + (r.withChunks ?? 0) - (r.correct ?? 0); // fallback
+    return {
+      total,
+      avgFaithfulness: r.faith ?? null,
+      avgAnswerRelevancy: r.rel ?? null,
+      avgContextPrecision: r.cp ?? null,
+      avgContextRecall: r.cr ?? null,
+      avgAnswerCorrectness: r.ac ?? null,
+      retrievalSuccessRate: total ? (r.correct ? r.correct / total : (r.withChunks ?? 0) / total) : null,
+      hallucinationRate: total ? (r.halluc ?? 0) / total : null,
+      avgLatencyMs: r.lat ?? null,
+      avgRetryCount: r.retry ?? null,
+      totalTokens: r.tokens ?? 0,
+      estimatedCost: r.cost || null,
+    };
   }
 
   // ---- unanswered queries ----

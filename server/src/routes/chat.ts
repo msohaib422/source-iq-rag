@@ -16,9 +16,11 @@ import { asyncHandler, optionalAuth, validate } from '../middleware/index.js';
 import { recordUnansweredQuery } from '../services/queries.js';
 import { getLlmProvider } from '../services/llm/index.js';
 import { LlmConfigurationError } from '../services/llm/types.js';
-import { answerQuestion, classifyIntent, streamAnswer } from '../services/rag.js';
+import { answerQuestion, classifyIntent, runRagPipeline, streamAnswer } from '../services/rag.js';
 import type { Citation } from '../types/domain.js';
 import { resolveKnowledgeBaseId } from '../services/accounts.js';
+import { getRagConfig } from '../services/ragConfig.js';
+import { recordEvaluation } from '../services/evalPersist.js';
 import { notFound } from '../utils/errors.js';
 import { chatRequestSchema } from './schemas.js';
 
@@ -60,7 +62,7 @@ chatRouter.post(
 
     const provider = getLlmProvider();
     const intent = classifyIntent(input.question);
-    const result = await answerQuestion(
+    const { result, meta } = await runRagPipeline(
       req.ctx.store,
       {
         userId: kbId,
@@ -71,16 +73,16 @@ chatRouter.post(
       },
       provider,
     );
+    result.meta = meta;
 
-    // The pipeline's own relevance verdict: a knowledge question whose answer
-    // cites nothing was not supported by any chunk it saw. Small talk and
-    // unclear messages never record, and a retriever/LLM failure throws before
-    // this line, so technical errors are never mistaken for a bad question.
     if (intent.kind === 'knowledge' && result.citations.length === 0) {
       await recordUnansweredQuery(req.ctx.store, kbId, input.question);
     }
 
-    res.json(result);
+    await recordEvaluation(req.ctx.store, kbId, input.question, { ...result, meta }, 'online');
+
+    const { meta: _m, ...response } = result;
+    res.json(response);
   }),
 );
 
@@ -112,11 +114,11 @@ chatRouter.post(
 
     let answer = '';
     let doneSent = false;
-    /** Citations of the pipeline's own done frame (aligned to what was grounded). */
     let finalCitations: Citation[] | null = null;
+    let resultMeta: any = null;
 
     try {
-      for await (const event of streamAnswer(
+      const { result, meta } = await runRagPipeline(
         req.ctx.store,
         {
           userId: kbId,
@@ -126,33 +128,27 @@ chatRouter.post(
           ...(input.minScore !== undefined ? { minScore: input.minScore } : {}),
         },
         getLlmProvider(),
-      )) {
+      );
+      resultMeta = meta;
+
+      send('citations', { citations: result.citations, retrievedCount: result.retrievedCount });
+
+      const fullAnswer = result.answer;
+      for (const part of fullAnswer.match(/\S+\s*/g) ?? [fullAnswer]) {
         if (controller.signal.aborted) break;
-        if (event.type === 'citations') {
-          send('citations', event.payload);
-        } else if (event.type === 'delta') {
-          answer += (event.payload as { text: string }).text;
-          send('delta', event.payload);
-        } else if (event.type === 'done') {
-          // Forward the pipeline's own payload: it carries the citations the
-          // answer actually referenced, not everything that was retrieved.
-          doneSent = true;
-          finalCitations = (event.payload as { citations: Citation[] }).citations;
-          send('done', event.payload);
-        }
+        answer += part;
+        send('delta', { text: part });
       }
+      doneSent = true;
+      finalCitations = result.citations;
+      send('done', { citations: result.citations, answerLength: answer.length });
 
-      // The client was disconnected before the answer completed.
-      if (!doneSent && !controller.signal.aborted) {
-        send('done', { citations: [], answerLength: answer.length });
-      }
-
-      // Same relevance verdict as the non-streaming endpoint: a knowledge
-      // question whose grounded reply referenced no chunk is recorded for the
-      // admin. Aborted or errored streams never reach this point (the abort
-      // guard above, or the catch below).
       if (!controller.signal.aborted && intent.kind === 'knowledge' && finalCitations?.length === 0) {
         await recordUnansweredQuery(req.ctx.store, kbId, input.question);
+      }
+
+      if (!controller.signal.aborted) {
+        await recordEvaluation(req.ctx.store, kbId, input.question, { ...result, meta }, 'online');
       }
     } catch (err) {
       send('error', {

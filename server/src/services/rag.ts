@@ -19,6 +19,13 @@ import { embedQuery } from './embeddings.js';
 import { getLlmProvider, type LlmProvider } from './llm/index.js';
 import { applyCleanResponseFormatting, CleanResponseFormatter } from './formatting.js';
 import { FALLBACK_REPLY } from './fallback.js';
+import { getRagConfig } from './ragConfig.js';
+import {
+  answerRelevancy,
+  checkFaithfulness,
+  contextPrecision,
+  tokenOverlap,
+} from './evaluation.js';
 
 export const SYSTEM_PROMPT = [
   'You are SourceIQ, a careful research assistant that answers questions strictly from the numbered context passages supplied by the user.',
@@ -332,12 +339,27 @@ export function alignCitationsToAnswer(answer: string, citations: Citation[]): C
   return citations.filter((c) => referenced.has(c.chunkId));
 }
 
+export interface PipelineMeta {
+  retrievalQuality: string | null;
+  retryCount: number;
+  selfRagDecisions: string[];
+  cragActions: string[];
+  retrievedChunks: ScoredChunk[];
+  faithfulnessScore: number | null;
+  answerRelevancyScore: number | null;
+  contextPrecision: number | null;
+  hallucinationFindings: string[];
+  processingTimeMs: number;
+}
+
 export interface AnswerResult {
   answer: string;
   citations: Citation[];
   retrievedCount: number;
   usedProvider: string;
   usedModel: string;
+  /** Internal metadata for evaluation; stripped before sending to clients. */
+  meta?: PipelineMeta;
 }
 
 /** Answer that needs neither retrieval nor a model call. */
@@ -351,49 +373,208 @@ function directResult(answer: string, provider: LlmProvider): AnswerResult {
   };
 }
 
+function tokenizeSimple(text: string): string[] {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, ' ')
+    .split(/\s+/)
+    .filter((t) => t.length > 2);
+}
+
+export function rewriteQuery(question: string, chunks: ScoredChunk[]): string {
+  const qTokens = new Set(tokenizeSimple(question));
+  const freq = new Map<string, number>();
+  for (const c of chunks.slice(0, 3)) {
+    for (const t of tokenizeSimple(c.chunk.text)) {
+      if (!qTokens.has(t)) freq.set(t, (freq.get(t) ?? 0) + 1);
+    }
+  }
+  const extra = [...freq.entries()]
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 4)
+    .map(([t]) => t);
+  return extra.length ? `${question} ${extra.join(' ')}` : question;
+}
+
+export function gradeRetrieval(chunks: ScoredChunk[], question: string): 'CORRECT' | 'AMBIGUOUS' | 'INCORRECT' {
+  const cfg = getRagConfig();
+  if (!cfg.cragEnabled) return chunks.length ? 'CORRECT' : 'INCORRECT';
+  if (!chunks.length) return 'INCORRECT';
+  const maxScore = Math.max(...chunks.map((c) => c.score));
+  const overlap = chunks.slice(0, 3).some((c) => tokenOverlap(question, c.chunk.text) >= 0.1);
+  if (maxScore >= cfg.correctThreshold && overlap) return 'CORRECT';
+  if (maxScore >= cfg.ambiguousThreshold) return 'AMBIGUOUS';
+  return 'INCORRECT';
+}
+
+export async function runRagPipeline(
+  store: Store,
+  options: RetrieveOptions,
+  provider: LlmProvider = getLlmProvider(),
+): Promise<{ result: AnswerResult; meta: PipelineMeta }> {
+  const started = Date.now();
+  const cfg = getRagConfig();
+  const intent = classifyIntent(options.question);
+
+  const meta: PipelineMeta = {
+    retrievalQuality: null,
+    retryCount: 0,
+    selfRagDecisions: [],
+    cragActions: [],
+    retrievedChunks: [],
+    faithfulnessScore: null,
+    answerRelevancyScore: null,
+    contextPrecision: null,
+    hallucinationFindings: [],
+    processingTimeMs: 0,
+  };
+
+  // Conversational / unclear: no retrieval.
+  if (intent.kind === 'conversational') {
+    const answer = pickReply(intent.smallTalk, options.question);
+    const result = directResult(answer, provider);
+    meta.processingTimeMs = Date.now() - started;
+    result.meta = meta;
+    return { result, meta };
+  }
+  if (intent.kind === 'unclear') {
+    const result = directResult(CLARIFY_REPLY, provider);
+    meta.processingTimeMs = Date.now() - started;
+    result.meta = meta;
+    return { result, meta };
+  }
+
+  const selfRagEnabled = cfg.selfRagEnabled;
+  if (selfRagEnabled) meta.selfRagDecisions.push('retrieval-necessary:true');
+
+  const maxRetries = selfRagEnabled ? cfg.maxRetries : 0;
+  let attempt = 0;
+  let currentQuestion = options.question;
+  let combined: ScoredChunk[] = [];
+  let quality: 'CORRECT' | 'AMBIGUOUS' | 'INCORRECT' = 'INCORRECT';
+
+  while (true) {
+    const ctx = await retrieveContext(store, { ...options, question: currentQuestion });
+    const chunks = ctx.chunks;
+    quality = gradeRetrieval(chunks, options.question);
+    meta.retrievalQuality = quality;
+
+    if (cfg.cragEnabled && quality === 'INCORRECT') {
+      meta.cragActions.push('INCORRECT');
+      if (attempt >= maxRetries) {
+        meta.selfRagDecisions.push('abstain:no-evidence');
+        const result = directResult(withGreeting(FALLBACK_REPLY, intent.greeting, options.question), provider);
+        meta.retrievedChunks = [];
+        meta.faithfulnessScore = 1;
+        meta.answerRelevancyScore = answerRelevancy(options.question, result.answer);
+        meta.processingTimeMs = Date.now() - started;
+        meta.retryCount = attempt;
+        result.meta = meta;
+        return { result, meta };
+      }
+      meta.cragActions.push('rewrite-query');
+      currentQuestion = rewriteQuery(options.question, chunks);
+      attempt += 1;
+      meta.retryCount = attempt;
+      continue;
+    }
+
+    if (cfg.cragEnabled && quality === 'AMBIGUOUS') {
+      meta.cragActions.push('AMBIGUOUS');
+      const rewritten = rewriteQuery(options.question, chunks);
+      const extraCtx = await retrieveContext(store, { ...options, question: rewritten });
+      const map = new Map<string, ScoredChunk>();
+      for (const c of chunks) map.set(c.chunk.id, c);
+      for (const c of extraCtx.chunks) {
+        const existing = map.get(c.chunk.id);
+        if (!existing || c.score > existing.score) map.set(c.chunk.id, c);
+      }
+      combined = [...map.values()].sort((a, b) => b.score - a.score).slice(0, options.limit ?? env.VECTOR_LIMIT);
+      meta.cragActions.push('additional-retrieval');
+    } else {
+      combined = chunks;
+    }
+
+    meta.retrievedChunks = combined;
+
+    const threshold = cfg.ambiguousThreshold;
+    let contextChunks = combined.filter((c) => c.score >= threshold);
+    if (!contextChunks.length) contextChunks = combined.slice(0, Math.min(3, combined.length));
+
+    if (!contextChunks.length) {
+      const result = directResult(withGreeting(FALLBACK_REPLY, intent.greeting, options.question), provider);
+      meta.faithfulnessScore = 1;
+      meta.answerRelevancyScore = answerRelevancy(options.question, result.answer);
+      meta.processingTimeMs = Date.now() - started;
+      meta.retryCount = attempt;
+      result.meta = meta;
+      return { result, meta };
+    }
+
+    const { prompt } = buildPrompt(options.question, contextChunks);
+    const citations = buildCitations(contextChunks);
+
+    const raw = await provider.complete({
+      system: SYSTEM_PROMPT,
+      messages: [{ role: 'user', content: prompt }],
+    });
+
+    const answerText = isTechnicalFallback(raw) ? FALLBACK_REPLY : raw;
+
+    // Self-reflection
+    let faithful = true;
+    let unsupported: string[] = [];
+    if (selfRagEnabled && answerText !== FALLBACK_REPLY) {
+      const fr = checkFaithfulness(answerText, contextChunks);
+      faithful = fr.score >= 0.5;
+      unsupported = fr.unsupportedClaims;
+      meta.faithfulnessScore = fr.score;
+      meta.hallucinationFindings = unsupported;
+      meta.selfRagDecisions.push(`faithfulness:${fr.score.toFixed(2)}`);
+      if (!faithful && attempt < maxRetries) {
+        meta.selfRagDecisions.push('retry:unfaithful');
+        currentQuestion = rewriteQuery(options.question, contextChunks);
+        attempt += 1;
+        meta.retryCount = attempt;
+        continue;
+      }
+    }
+
+    if (answerText === FALLBACK_REPLY) {
+      meta.faithfulnessScore = 1;
+      meta.hallucinationFindings = [];
+    }
+
+    const finalAnswer = withGreeting(applyCleanResponseFormatting(answerText), intent.greeting, options.question);
+    const finalCitations = isTechnicalFallback(raw) ? [] : alignCitationsToAnswer(raw, citations);
+
+    const result: AnswerResult = {
+      answer: finalAnswer,
+      citations: finalCitations,
+      retrievedCount: contextChunks.length,
+      usedProvider: provider.name,
+      usedModel: provider.model,
+    };
+
+    meta.retrievedChunks = contextChunks;
+    meta.retrievalQuality = quality;
+    meta.retryCount = attempt;
+    meta.answerRelevancyScore = answerRelevancy(options.question, finalAnswer);
+    meta.contextPrecision = contextPrecision(contextChunks, raw);
+    meta.hallucinationFindings = unsupported;
+    meta.processingTimeMs = Date.now() - started;
+    result.meta = meta;
+    return { result, meta };
+  }
+}
+
 export async function answerQuestion(
   store: Store,
   options: RetrieveOptions,
   provider: LlmProvider = getLlmProvider(),
 ): Promise<AnswerResult> {
-  const intent = classifyIntent(options.question);
-
-  // Small talk is answered conversationally; the knowledge base is not queried.
-  if (intent.kind === 'conversational') {
-    return directResult(pickReply(intent.smallTalk, options.question), provider);
-  }
-  if (intent.kind === 'unclear') {
-    return directResult(CLARIFY_REPLY, provider);
-  }
-
-  const { chunks, question } = await retrieveContext(store, options);
-
-  // Nothing retrieved: answer deterministically rather than asking the model to
-  // fill the gap from its pretrained knowledge.
-  if (!chunks.length) {
-    return directResult(withGreeting(FALLBACK_REPLY, intent.greeting, options.question), provider);
-  }
-
-  const { prompt } = buildPrompt(question, chunks);
-  const citations = buildCitations(chunks);
-
-  const raw = await provider.complete({
-    system: SYSTEM_PROMPT,
-    messages: [{ role: 'user', content: prompt }],
-  });
-
-  // Normalize any technical/generic refusal the model may have produced into
-  // the friendly fallback wording, so users never see retrieval internals.
-  const answerText = isTechnicalFallback(raw) ? FALLBACK_REPLY : raw;
-
-  return {
-    // The raw answer stays the alignment input; the rule applies for display.
-    answer: withGreeting(applyCleanResponseFormatting(answerText), intent.greeting, options.question),
-    citations: isTechnicalFallback(raw) ? [] : alignCitationsToAnswer(raw, citations),
-    retrievedCount: chunks.length,
-    usedProvider: provider.name,
-    usedModel: provider.model,
-  };
+  const { result } = await runRagPipeline(store, options, provider);
+  return result;
 }
 
 export async function* streamAnswer(
@@ -401,61 +582,14 @@ export async function* streamAnswer(
   options: RetrieveOptions,
   provider: LlmProvider = getLlmProvider(),
 ): AsyncGenerator<{ type: 'citations' | 'delta' | 'done'; payload: unknown }> {
-  const intent = classifyIntent(options.question);
+  const { result } = await runRagPipeline(store, options, provider);
 
-  // Replay a fixed reply through the same SSE frames the UI already handles.
-  async function* fixed(reply: string): AsyncGenerator<{ type: 'citations' | 'delta' | 'done'; payload: unknown }> {
-    yield { type: 'citations', payload: { citations: [], retrievedCount: 0 } };
-    let text = '';
-    for (const part of wordGroups(reply)) {
-      text += part;
-      yield { type: 'delta', payload: { text: part } };
-    }
-    yield { type: 'done', payload: { citations: [], answerLength: text.length } };
+  yield { type: 'citations', payload: { citations: result.citations, retrievedCount: result.retrievedCount } };
+
+  let text = '';
+  for (const part of wordGroups(result.answer)) {
+    text += part;
+    yield { type: 'delta', payload: { text: part } };
   }
-
-  if (intent.kind === 'conversational') {
-    yield* fixed(pickReply(intent.smallTalk, options.question));
-    return;
-  }
-  if (intent.kind === 'unclear') {
-    yield* fixed(CLARIFY_REPLY);
-    return;
-  }
-
-  const { chunks, question } = await retrieveContext(store, options);
-
-  if (!chunks.length) {
-    yield* fixed(withGreeting(FALLBACK_REPLY, intent.greeting, options.question));
-    return;
-  }
-
-  const { prompt } = buildPrompt(question, chunks);
-  const citations = buildCitations(chunks);
-
-  yield { type: 'citations', payload: { citations, retrievedCount: chunks.length } };
-
-  let answer = '';
-  const prefix = intent.greeting ? `${pickReply(intent.greeting, options.question)}\n\n` : '';
-  if (prefix) {
-    answer += prefix;
-    for (const part of wordGroups(prefix)) yield { type: 'delta', payload: { text: part } };
-  }
-
-  // The formatter only decides what is safe to show already; the raw model
-  // output keeps feeding citation alignment below.
-  const formatter = new CleanResponseFormatter();
-  for await (const delta of provider.stream({ system: SYSTEM_PROMPT, messages: [{ role: 'user', content: prompt }] })) {
-    answer += delta;
-    const visible = formatter.push(delta);
-    if (visible) yield { type: 'delta', payload: { text: visible } };
-  }
-
-  const visible = formatter.flush();
-  if (visible) yield { type: 'delta', payload: { text: visible } };
-
-  yield {
-    type: 'done',
-    payload: { citations: alignCitationsToAnswer(answer, citations), answerLength: answer.length },
-  };
+  yield { type: 'done', payload: { citations: result.citations, answerLength: text.length } };
 }

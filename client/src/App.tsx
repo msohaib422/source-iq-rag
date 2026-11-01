@@ -5,6 +5,8 @@ import { Spinner } from './components/Spinner';
 import { useAuth } from './context/AuthContext';
 import { ChatPage } from './pages/ChatPage';
 import { DashboardPage } from './pages/DashboardPage';
+import { EvaluationDetailPage } from './pages/EvaluationDetailPage';
+import { EvaluationPage } from './pages/EvaluationPage';
 import { DocumentDetailPage } from './pages/DocumentDetailPage';
 import { DocumentsPage } from './pages/DocumentsPage';
 import { LoginPage } from './pages/LoginPage';
@@ -92,6 +94,8 @@ export default function App() {
             <Route path="/admin/documents" element={<DocumentsPage />} />
             <Route path="/admin/documents/:id" element={<DocumentDetailPage />} />
             <Route path="/admin/queries" element={<QueriesPage />} />
+            <Route path="/admin/evaluations" element={<EvaluationPage />} />
+            <Route path="/admin/evaluations/:id" element={<EvaluationDetailPage />} />
             <Route path="/admin/settings" element={<SettingsPage />} />
           </Route>
         </Route>

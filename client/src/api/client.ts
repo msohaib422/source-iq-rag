@@ -12,6 +12,9 @@ import type {
   Chunk,
   Citation,
   DocumentStatus,
+  EvaluationListResponse,
+  EvaluationRecord,
+  EvaluationStats,
   HealthInfo,
   IngestionResult,
   QueriesResponse,
@@ -200,6 +203,26 @@ export const api = {
       usedProvider: string;
       usedModel: string;
     }>('/api/chat', { method: 'POST', body }),
+
+  // ---- evaluations ----
+  evaluationStats: () => request<{ stats: EvaluationStats }>('/api/evaluations/stats'),
+  listEvaluations: (params: { limit?: number; skip?: number; mode?: 'online' | 'offline' } = {}) => {
+    const qs = new URLSearchParams();
+    if (params.limit) qs.set('limit', String(params.limit));
+    if (params.skip) qs.set('skip', String(params.skip));
+    if (params.mode) qs.set('mode', params.mode);
+    const suffix = qs.toString() ? `?${qs}` : '';
+    return request<EvaluationListResponse>(`/api/evaluations${suffix}`);
+  },
+  getEvaluation: (id: string) => request<{ evaluation: EvaluationRecord }>(`/api/evaluations/${id}`),
+  runBenchmark: (items: Array<{ question: string; expectedAnswer?: string; relevantChunkIds?: string[] }>) =>
+    request<{ benchmarkId: string; count: number; results: unknown[] }>('/api/evaluations/benchmark', {
+      method: 'POST',
+      body: { items },
+    }),
+  listBenchmarkResults: () => request<EvaluationListResponse>('/api/evaluations/benchmark/results'),
+  getEvalConfig: () => request<{ config: any }>('/api/evaluations/config'),
+  updateEvalConfig: (patch: any) => request<{ config: any }>('/api/evaluations/config', { method: 'PATCH', body: patch }),
 
   stats: () => request<WorkspaceStats>('/api/health/me/stats'),
 };

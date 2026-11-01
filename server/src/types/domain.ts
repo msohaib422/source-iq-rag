@@ -118,6 +118,53 @@ export interface StoreStats {
   vectorSearchBackend: 'atlas' | 'in-memory';
 }
 
+// ---------------------------------------------------------------------------
+// RAG evaluation
+// ---------------------------------------------------------------------------
+
+export type EvaluationMode = 'online' | 'offline';
+
+export interface EvaluationRecord {
+  id: string;
+  userId: string;
+  question: string;
+  answer: string;
+  retrievedChunkIds: string[];
+  retrievedDocumentIds: string[];
+  retrievalScores: number[];
+  retrievalQuality: string | null;
+  faithfulnessScore: number | null;
+  answerRelevancyScore: number | null;
+  contextPrecision: number | null;
+  contextRecall: number | null;
+  answerCorrectness: number | null;
+  hallucinationFindings: string[];
+  retryCount: number;
+  selfRagDecisions: string[];
+  cragActions: string[];
+  processingTimeMs: number | null;
+  tokenUsage: number | null;
+  estimatedCost: number | null;
+  mode: EvaluationMode;
+  benchmarkId: string | null;
+  createdAt: Date;
+}
+
+export interface EvaluationStats {
+  total: number;
+  avgFaithfulness: number | null;
+  avgAnswerRelevancy: number | null;
+  avgContextPrecision: number | null;
+  avgContextRecall: number | null;
+  avgAnswerCorrectness: number | null;
+  retrievalSuccessRate: number | null;
+  hallucinationRate: number | null;
+  avgLatencyMs: number | null;
+  avgRetryCount: number | null;
+  totalTokens: number;
+  estimatedCost: number | null;
+}
+
 /**
  * Honest, probe-backed state of the vector index that retrieval depends on.
  *

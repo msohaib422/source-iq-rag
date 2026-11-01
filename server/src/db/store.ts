@@ -14,6 +14,8 @@
 import type {
   ChunkRecord,
   DocumentRecord,
+  EvaluationRecord,
+  EvaluationStats,
   QueryRecord,
   QueryRecordStatus,
   ScoredChunk,
@@ -65,6 +67,30 @@ export interface CreateUnansweredQueryInput {
   question: string;
 }
 
+export interface CreateEvaluationInput {
+  userId: string;
+  question: string;
+  answer: string;
+  retrievedChunkIds?: string[];
+  retrievedDocumentIds?: string[];
+  retrievalScores?: number[];
+  retrievalQuality?: string | null;
+  faithfulnessScore?: number | null;
+  answerRelevancyScore?: number | null;
+  contextPrecision?: number | null;
+  contextRecall?: number | null;
+  answerCorrectness?: number | null;
+  hallucinationFindings?: string[];
+  retryCount?: number;
+  selfRagDecisions?: string[];
+  cragActions?: string[];
+  processingTimeMs?: number | null;
+  tokenUsage?: number | null;
+  estimatedCost?: number | null;
+  mode?: 'online' | 'offline';
+  benchmarkId?: string | null;
+}
+
 export interface ListUnansweredQueriesOptions {
   status?: QueryRecordStatus;
 }
@@ -104,6 +130,15 @@ export interface Store {
 
   // ---- vector search ----
   vectorSearch(params: VectorSearchParams): Promise<ScoredChunk[]>;
+
+  // ---- evaluations ----
+  createEvaluation(input: CreateEvaluationInput): Promise<EvaluationRecord>;
+  listEvaluations(
+    userId: string,
+    options?: { limit?: number; skip?: number; mode?: 'online' | 'offline' },
+  ): Promise<{ items: EvaluationRecord[]; total: number }>;
+  getEvaluation(id: string, userId: string): Promise<EvaluationRecord | null>;
+  evaluationStats(userId?: string): Promise<EvaluationStats>;
 
   // ---- unanswered queries (Queries Management) ----
   createUnansweredQuery(input: CreateUnansweredQueryInput): Promise<QueryRecord>;

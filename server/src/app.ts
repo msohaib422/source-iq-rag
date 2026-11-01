@@ -13,6 +13,7 @@ import { chunksRouter } from './routes/chunks.js';
 import { documentsRouter } from './routes/documents.js';
 import { healthRouter } from './routes/health.js';
 import { queriesRouter } from './routes/queries.js';
+import { evaluationsRouter } from './routes/evaluations.js';
 
 export function createApp(context?: AppContext): Express {
   const app = express();
@@ -71,6 +72,7 @@ export function createApp(context?: AppContext): Express {
   app.use('/api/documents', documentsRouter);
   app.use('/api/chunks', chunksRouter);
   app.use('/api/queries', queriesRouter);
+  app.use('/api/evaluations', evaluationsRouter);
   app.use('/api/chat', chatRouter);
 
   app.use(notFoundHandler);

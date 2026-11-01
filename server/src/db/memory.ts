@@ -13,6 +13,8 @@ import { randomUUID } from 'node:crypto';
 import type {
   ChunkRecord,
   DocumentRecord,
+  EvaluationRecord,
+  EvaluationStats,
   QueryRecord,
   QueryRecordStatus,
   ScoredChunk,
@@ -24,6 +26,7 @@ import type {
 import type {
   CreateChunkInput,
   CreateDocumentInput,
+  CreateEvaluationInput,
   CreateUnansweredQueryInput,
   CreateUserInput,
   ListChunksOptions,
@@ -38,6 +41,7 @@ interface Collections {
   documents: Map<string, DocumentRecord>;
   chunks: Map<string, ChunkRecord>;
   queries: Map<string, QueryRecord>;
+  evaluations: Map<string, EvaluationRecord>;
 }
 
 function emptyCollections(): Collections {
@@ -46,6 +50,7 @@ function emptyCollections(): Collections {
     documents: new Map(),
     chunks: new Map(),
     queries: new Map(),
+    evaluations: new Map(),
   };
 }
 
@@ -313,6 +318,84 @@ export class MemoryStore implements Store {
     scored.sort((a, b) => b.score - a.score);
     const limited = scored.slice(0, params.limit);
     return params.minScore === undefined ? limited : limited.filter((s) => s.score >= params.minScore!);
+  }
+
+  // ---- evaluations ----
+
+  async createEvaluation(input: CreateEvaluationInput): Promise<EvaluationRecord> {
+    const record: EvaluationRecord = {
+      id: randomUUID(),
+      userId: input.userId,
+      question: input.question,
+      answer: input.answer,
+      retrievedChunkIds: input.retrievedChunkIds ?? [],
+      retrievedDocumentIds: input.retrievedDocumentIds ?? [],
+      retrievalScores: input.retrievalScores ?? [],
+      retrievalQuality: input.retrievalQuality ?? null,
+      faithfulnessScore: input.faithfulnessScore ?? null,
+      answerRelevancyScore: input.answerRelevancyScore ?? null,
+      contextPrecision: input.contextPrecision ?? null,
+      contextRecall: input.contextRecall ?? null,
+      answerCorrectness: input.answerCorrectness ?? null,
+      hallucinationFindings: input.hallucinationFindings ?? [],
+      retryCount: input.retryCount ?? 0,
+      selfRagDecisions: input.selfRagDecisions ?? [],
+      cragActions: input.cragActions ?? [],
+      processingTimeMs: input.processingTimeMs ?? null,
+      tokenUsage: input.tokenUsage ?? null,
+      estimatedCost: input.estimatedCost ?? null,
+      mode: input.mode ?? 'online',
+      benchmarkId: input.benchmarkId ?? null,
+      createdAt: new Date(),
+    };
+    this.db.evaluations.set(record.id, record);
+    return { ...record };
+  }
+
+  async listEvaluations(
+    userId: string,
+    options: { limit?: number; skip?: number; mode?: 'online' | 'offline' } = {},
+  ): Promise<{ items: EvaluationRecord[]; total: number }> {
+    const limit = options.limit ?? 50;
+    const skip = options.skip ?? 0;
+    let all = [...this.db.evaluations.values()]
+      .filter((e) => e.userId === userId)
+      .filter((e) => (options.mode ? e.mode === options.mode : true))
+      .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+    const total = all.length;
+    all = all.slice(skip, skip + limit);
+    return { items: all.map((e) => ({ ...e })), total };
+  }
+
+  async getEvaluation(id: string, userId: string): Promise<EvaluationRecord | null> {
+    const record = this.db.evaluations.get(id);
+    if (!record || record.userId !== userId) return null;
+    return { ...record };
+  }
+
+  async evaluationStats(userId?: string): Promise<EvaluationStats> {
+    const all = [...this.db.evaluations.values()].filter((e) => (userId ? e.userId === userId : true));
+    const total = all.length;
+    const avg = (vals: (number | null)[]) => {
+      const nums = vals.filter((v): v is number => typeof v === 'number' && Number.isFinite(v));
+      return nums.length ? nums.reduce((a, b) => a + b, 0) / nums.length : null;
+    };
+    const retrievalSuccess = all.filter((e) => e.retrievalQuality === 'CORRECT' || (e.retrievedChunkIds?.length ?? 0) > 0).length;
+    const halluc = all.filter((e) => (e.hallucinationFindings?.length ?? 0) > 0).length;
+    return {
+      total,
+      avgFaithfulness: avg(all.map((e) => e.faithfulnessScore)),
+      avgAnswerRelevancy: avg(all.map((e) => e.answerRelevancyScore)),
+      avgContextPrecision: avg(all.map((e) => e.contextPrecision)),
+      avgContextRecall: avg(all.map((e) => e.contextRecall)),
+      avgAnswerCorrectness: avg(all.map((e) => e.answerCorrectness)),
+      retrievalSuccessRate: total ? retrievalSuccess / total : null,
+      hallucinationRate: total ? halluc / total : null,
+      avgLatencyMs: avg(all.map((e) => e.processingTimeMs)),
+      avgRetryCount: avg(all.map((e) => e.retryCount)),
+      totalTokens: all.reduce((s, e) => s + (e.tokenUsage ?? 0), 0),
+      estimatedCost: all.reduce((s, e) => s + (e.estimatedCost ?? 0), 0) || null,
+    };
   }
 
   // ---- unanswered queries ----

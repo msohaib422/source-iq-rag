@@ -2,12 +2,13 @@ import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { PersonIcon } from './MessageAvatar';
-import { ChatIcon, DashboardIcon, DocumentIcon, InboxIcon, MoonIcon, SettingsIcon, SunIcon } from './icons';
+import { ChatIcon, DashboardIcon, DocumentIcon, EvalIcon, InboxIcon, MoonIcon, SettingsIcon, SunIcon } from './icons';
 
 const NAV = [
   { to: '/admin', label: 'Dashboard', end: true, Icon: DashboardIcon },
   { to: '/admin/documents', label: 'Documents', end: false, Icon: DocumentIcon },
   { to: '/admin/queries', label: 'Queries', end: false, Icon: InboxIcon },
+  { to: '/admin/evaluations', label: 'Evaluation', end: false, Icon: EvalIcon },
   { to: '/admin/settings', label: 'Settings', end: false, Icon: SettingsIcon },
   { to: '/chat', label: 'Chat', end: false, Icon: ChatIcon },
 ];

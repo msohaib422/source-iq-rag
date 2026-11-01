@@ -114,6 +114,14 @@ const envSchema = z.object({
 
   // Set by the test-suite to use deterministic, network-free behaviour.
   DISABLE_LLM_REMOTE: boolish(false),
+
+  // ---- RAG enhancement toggles ----
+  SELF_RAG_ENABLED: boolish(true),
+  CRAG_ENABLED: boolish(true),
+  RAG_ONLINE_EVAL: boolish(true),
+  RAG_MAX_RETRIES: z.coerce.number().int().min(0).max(5).default(2),
+  RAG_CORRECT_THRESHOLD: z.coerce.number().min(0).max(1).default(0.35),
+  RAG_AMBIGUOUS_THRESHOLD: z.coerce.number().min(0).max(1).default(0.2),
 });
 
 export type Env = z.infer<typeof envSchema>;
