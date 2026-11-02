@@ -18,6 +18,44 @@ export interface UserRecord {
 
 export type DocumentStatus = 'pending' | 'processing' | 'ready' | 'failed';
 
+/**
+ * Persisted state of a website crawl (Firecrawl Crawl API) stored on the
+ * owning Document so the job survives process restarts: every poll
+ * (`POST /api/websites/:id/advance`) reads it, does a bounded slice of work
+ * and writes the cursor back - no background loops, no held requests.
+ */
+export interface WebsiteCrawlState {
+  /** Firecrawl crawl job id. */
+  jobId: string;
+  /** Firecrawl job status: `failed`/`cancelled` are terminal on their side. */
+  status: 'scraping' | 'completed' | 'failed' | 'cancelled';
+  /** Our pipeline phase: `indexing` runs once the Firecrawl job is completed. */
+  phase: 'scraping' | 'indexing' | 'completed' | 'failed';
+  /** Pages Firecrawl has crawled so far (progress display). */
+  crawled: number;
+  /** Pages Firecrawl reports in total (null until known). */
+  discovered: number | null;
+  /** Pages chunked + embedded + stored by us so far (derived from chunk refs). */
+  indexed: number;
+  /**
+   * Cursor for the next page of crawl results.
+   *
+   * `null` means "no further pages", except while `page1Pending` is true: the
+   * first results page always arrives with the status poll, so it is consumed
+   * inline when the job completes and only then replaced by a cursor.
+   */
+  nextCursor: string | null;
+  /** True until the first (status-response) results page has been fully indexed. */
+  page1Pending: boolean;
+  /** Firecrawl-reported failure detail (job-level or summary of failed pages). */
+  failedDetail: string | null;
+  /** Last transient API error seen; the next poll retries automatically. */
+  lastError: string | null;
+  startedAt: Date;
+  updatedAt: Date;
+  completedAt: Date | null;
+}
+
 export interface DocumentRecord {
   id: string;
   userId: string;
@@ -31,6 +69,12 @@ export interface DocumentRecord {
   chunkCount: number;
   status: DocumentStatus;
   error: string | null;
+  /** 'pdf' for uploaded files, 'website' for Firecrawl crawls (optional for legacy rows). */
+  sourceType?: 'pdf' | 'website';
+  /** Submitted seed URL for website crawls. */
+  websiteUrl?: string | null;
+  /** Crawl job state; only present on website documents. */
+  crawl?: WebsiteCrawlState | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -48,6 +92,14 @@ export interface ChunkRecord {
   charEnd: number | null;
   /** True when a human edited the text (so the UI can flag it). */
   edited: boolean;
+  /** 'pdf' for uploaded files, 'website' for crawled pages (optional for legacy rows). */
+  sourceType?: 'pdf' | 'website';
+  /** The crawled page this chunk came from (website chunks only). */
+  pageUrl?: string | null;
+  /** Page title reported by Firecrawl (website chunks only). */
+  pageTitle?: string | null;
+  /** Seed URL of the crawl this page belongs to (website chunks only). */
+  websiteUrl?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -91,6 +143,8 @@ export interface Citation {
   documentTitle: string;
   ordinal: number;
   page: number | null;
+  /** Source page URL for website chunks; null for PDF chunks. */
+  pageUrl?: string | null;
   score: number;
   snippet: string;
 }

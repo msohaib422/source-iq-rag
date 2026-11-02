@@ -8,6 +8,7 @@ import { DocumentIcon } from '../components/icons';
 import { Spinner } from '../components/Spinner';
 import { StatusBadge } from '../components/StatusBadge';
 import { UploadZone } from '../components/UploadZone';
+import { WebsiteIngest } from '../components/WebsiteIngest';
 import { useAuth } from '../context/AuthContext';
 import { useAsync, useDebounced } from '../hooks';
 
@@ -54,6 +55,18 @@ export function DocumentsPage() {
       } else {
         setNotice({ tone: 'error', text: result.error ?? 'Indexing failed.' });
       }
+    },
+    [documents],
+  );
+
+  const onCrawlSettled = useCallback(
+    (result: { documentId: string; title: string; ok: boolean; error?: string }) => {
+      if (result.ok) {
+        setNotice({ tone: 'success', text: `“${result.title}” crawled and indexed — ready to search.` });
+      } else {
+        setNotice({ tone: 'error', text: result.error ?? 'The crawl failed.' });
+      }
+      void documents.refetch(true);
     },
     [documents],
   );
@@ -179,9 +192,23 @@ export function DocumentsPage() {
       ) : null}
 
       {isAdmin ? (
-        <div className="card mb">
-          <UploadZone onUploaded={onUploaded} />
-        </div>
+        <>
+          <div className="card mb">
+            <UploadZone onUploaded={onUploaded} />
+          </div>
+          <div className="card mb">
+            <div className="section-head">
+              <h2>Crawl a website</h2>
+            </div>
+            <WebsiteIngest
+              onSettled={onCrawlSettled}
+              onStarted={() => void documents.refetch(true)}
+              resumeFrom={list.find(
+                (d) => d.sourceType === 'website' && (d.status === 'processing' || d.status === 'pending'),
+              )}
+            />
+          </div>
+        </>
       ) : null}
 
       <div className="card">
@@ -285,7 +312,7 @@ export function DocumentsPage() {
                     data-testid="document-select"
                   />
                 ) : null}
-                <span className="doc-icon">PDF</span>
+                <span className="doc-icon">{doc.sourceType === 'website' ? 'WEB' : 'PDF'}</span>
                 <span className="doc-info">
                   <Link to={`/admin/documents/${doc.id}`} className="doc-title">
                     {doc.title}

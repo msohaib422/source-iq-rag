@@ -190,6 +190,8 @@ and the offline LLM provider. To use Atlas, set `MONGODB_URI`.
 | `LLM_PROVIDER` | `mock` | `mock` \| `groq` \| `mistral` \| `openrouter` \| `openai` \| `gemini` |
 | `LLM_API_KEY` | *(empty)* | Key for the selected provider (or use the provider-specific var) |
 | `MAX_UPLOAD_MB` | `25` | Upload size limit |
+| `FIRECRAWL_API_KEY` | *(empty)* | Firecrawl API key for website crawls. Empty ⇒ website ingestion disabled |
+| `FIRECRAWL_MAX_PAGES` | `100` | Maximum pages per website crawl (1–10000) |
 
 ---
 

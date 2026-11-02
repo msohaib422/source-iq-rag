@@ -24,6 +24,7 @@ import type {
   VectorSearchParams,
 } from '../types/domain.js';
 import type {
+  ChunkRef,
   CreateChunkInput,
   CreateDocumentInput,
   CreateEvaluationInput,
@@ -155,6 +156,9 @@ export class MemoryStore implements Store {
       chunkCount: 0,
       status: 'pending',
       error: null,
+      ...(input.sourceType !== undefined ? { sourceType: input.sourceType } : {}),
+      ...(input.websiteUrl !== undefined ? { websiteUrl: input.websiteUrl } : {}),
+      ...(input.crawl !== undefined ? { crawl: input.crawl } : {}),
       createdAt: now,
       updatedAt: now,
     };
@@ -183,7 +187,10 @@ export class MemoryStore implements Store {
   async updateDocument(id: string, userId: string, patch: Partial<DocumentRecord>): Promise<DocumentRecord | null> {
     const doc = this.db.documents.get(id);
     if (!doc || doc.userId !== userId) return null;
-    const keys = ['title', 'status', 'error', 'pageCount', 'charCount', 'chunkCount', 'storagePath'] as const;
+    const keys = [
+      'title', 'status', 'error', 'pageCount', 'charCount', 'chunkCount', 'storagePath',
+      'sizeBytes', 'sourceType', 'websiteUrl', 'crawl',
+    ] as const;
     for (const key of keys) {
       if (patch[key] !== undefined) (doc as unknown as Record<string, unknown>)[key] = patch[key];
     }
@@ -226,6 +233,10 @@ export class MemoryStore implements Store {
         charStart: c.charStart,
         charEnd: c.charEnd,
         edited: false,
+        ...(c.sourceType !== undefined ? { sourceType: c.sourceType } : {}),
+        ...(c.pageUrl !== undefined ? { pageUrl: c.pageUrl } : {}),
+        ...(c.pageTitle !== undefined ? { pageTitle: c.pageTitle } : {}),
+        ...(c.websiteUrl !== undefined ? { websiteUrl: c.websiteUrl } : {}),
         createdAt: now,
         updatedAt: now,
       };
@@ -243,6 +254,12 @@ export class MemoryStore implements Store {
     const skip = options.skip ?? 0;
     const limit = options.limit ?? all.length;
     return all.slice(skip, skip + limit).map((c) => ({ ...c, embedding: [] }));
+  }
+
+  async listChunkRefs(documentId: string): Promise<ChunkRef[]> {
+    return [...this.db.chunks.values()]
+      .filter((c) => c.documentId === documentId)
+      .map((c) => ({ pageUrl: c.pageUrl ?? null, ordinal: c.ordinal }));
   }
 
   async getChunk(id: string, userId: string): Promise<ChunkRecord | null> {

@@ -298,20 +298,22 @@ export function setDocumentTitleResolver(fn: (documentId: string) => string | nu
   documentTitleResolver = fn;
 }
 
-function citationMeta(chunk: ChunkRecord): { documentTitle: string; page: number | null } {
+function citationMeta(chunk: ChunkRecord): { documentTitle: string; page: number | null; pageUrl: string | null } {
   const title = documentTitleResolver?.(chunk.documentId) ?? 'Untitled document';
-  return { documentTitle: title, page: chunk.page };
+  return { documentTitle: title, page: chunk.page, pageUrl: chunk.pageUrl ?? null };
 }
 
 export function buildCitations(chunks: ScoredChunk[], maxChars = 320): Citation[] {
   return chunks.map(({ chunk, score }) => {
-    const { documentTitle, page } = citationMeta(chunk);
+    const { documentTitle, page, pageUrl } = citationMeta(chunk);
     return {
       chunkId: chunk.id,
       documentId: chunk.documentId,
       documentTitle,
       ordinal: chunk.ordinal,
       page,
+      // Only carried for website chunks so PDF citations stay byte-identical.
+      ...(pageUrl ? { pageUrl } : {}),
       score: Number(score.toFixed(6)),
       snippet: excerpt(chunk.text, maxChars),
     };

@@ -39,6 +39,10 @@ export interface CreateDocumentInput {
   storagePath: string | null;
   mimeType: string;
   sizeBytes: number;
+  /** Optional website-ingestion metadata (absent for PDF uploads). */
+  sourceType?: 'pdf' | 'website';
+  websiteUrl?: string | null;
+  crawl?: DocumentRecord['crawl'];
 }
 
 export interface CreateChunkInput {
@@ -50,6 +54,11 @@ export interface CreateChunkInput {
   page: number | null;
   charStart: number | null;
   charEnd: number | null;
+  /** Optional website-ingestion metadata (absent for PDF chunks). */
+  sourceType?: 'pdf' | 'website';
+  pageUrl?: string | null;
+  pageTitle?: string | null;
+  websiteUrl?: string | null;
 }
 
 export interface ListDocumentsOptions {
@@ -60,6 +69,16 @@ export interface ListDocumentsOptions {
 export interface ListChunksOptions {
   limit?: number;
   skip?: number;
+}
+
+/**
+ * Lightweight per-chunk reference used by website ingestion: page URL + ordinal
+ * only, never the chunk text or embedding, so resume/dedupe checks stay cheap
+ * and memory-bounded even for very large documents.
+ */
+export interface ChunkRef {
+  pageUrl: string | null;
+  ordinal: number;
 }
 
 export interface CreateUnansweredQueryInput {
@@ -118,6 +137,8 @@ export interface Store {
   // ---- chunks ----
   insertChunks(chunks: CreateChunkInput[]): Promise<ChunkRecord[]>;
   listChunks(documentId: string, options?: ListChunksOptions): Promise<ChunkRecord[]>;
+  /** Page URL + ordinal for every chunk of a document (no text/embedding). */
+  listChunkRefs(documentId: string): Promise<ChunkRef[]>;
   getChunk(id: string, userId: string): Promise<ChunkRecord | null>;
   updateChunk(id: string, userId: string, patch: Partial<Pick<ChunkRecord, 'text' | 'embedding' | 'edited'>>): Promise<
     ChunkRecord | null

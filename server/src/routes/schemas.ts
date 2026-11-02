@@ -37,6 +37,35 @@ export const reindexSchema = z.object({
   reembed: z.boolean().default(true),
 });
 
+// ---- website ingestion (Firecrawl) ----
+
+/** True only for absolute http(s) URLs without embedded credentials. */
+export function isAllowedWebsiteUrl(value: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+  if (parsed.username || parsed.password) return false;
+  return true;
+}
+
+/** Normalise a schema-validated URL (idempotent; safe to store and crawl). */
+export function normalizeWebsiteUrl(value: string): string {
+  return new URL(value).toString();
+}
+
+export const websiteCrawlSchema = z.object({
+  url: z
+    .string()
+    .trim()
+    .min(1, 'URL is required.')
+    .max(2048, 'URL is too long.')
+    .refine(isAllowedWebsiteUrl, 'Enter a valid absolute http(s) URL without embedded credentials.'),
+});
+
 // ---- queries management ----
 
 export const queriesQuerySchema = z.object({

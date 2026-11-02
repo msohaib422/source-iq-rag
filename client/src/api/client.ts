@@ -173,6 +173,50 @@ export const api = {
   reindexDocument: (id: string) =>
     request<{ document: SourceDocument; updated: number }>(`/api/documents/${id}/reindex`, { method: 'POST', body: {} }),
 
+  // ---- websites (Firecrawl crawl, admin only) ----
+  /**
+   * Start a crawl for a URL and return its document.
+   *
+   * A 422 is not an error here: the record was created but Firecrawl refused
+   * to start it (bad key, no credits). The response still carries the failed
+   * document so the UI can display and delete it — mirroring how a failed PDF
+   * upload reports its ingestion alongside a 422.
+   */
+  startWebsiteCrawl: async (url: string): Promise<SourceDocument> => {
+    const response = await request<Response>('/api/websites', {
+      method: 'POST',
+      body: { url },
+      raw: true,
+    });
+    const text = await response.text();
+    let payload: {
+      document?: SourceDocument;
+      error?: { code?: string; message?: string; details?: unknown };
+    } | null = null;
+    if (text) {
+      try {
+        payload = JSON.parse(text);
+      } catch {
+        /* handled below */
+      }
+    }
+    if (payload?.document && (response.ok || response.status === 422)) return payload.document;
+    const err = payload?.error;
+    if (response.status === 401) onUnauthorized?.();
+    throw new ApiError(
+      response.status,
+      err?.code ?? 'CRAWL_START_FAILED',
+      err?.message ?? `Starting the crawl failed with status ${response.status}.`,
+      err?.details ?? (payload?.document ? { document: payload.document } : undefined),
+    );
+  },
+  /** Run one bounded slice of crawl/index work and return the updated document. */
+  advanceWebsiteCrawl: (id: string) =>
+    request<{ document: SourceDocument }>(`/api/websites/${encodeURIComponent(id)}/advance`, {
+      method: 'POST',
+      body: {},
+    }),
+
   // ---- chunks ----
   updateChunk: (id: string, text: string) =>
     request<{ chunk: Chunk }>(`/api/chunks/${id}`, { method: 'PATCH', body: { text } }),

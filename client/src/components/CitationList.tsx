@@ -1,6 +1,18 @@
 import type { Citation } from '../api/types';
 import { useCopyToClipboard } from '../hooks';
 
+/** Compact a URL for a badge label: host + path, JS-truncated. */
+function shortUrl(raw: string): string {
+  try {
+    const u = new URL(raw);
+    const path = u.pathname === '/' ? '' : u.pathname;
+    const s = `${u.hostname.replace(/^www\./, '')}${path}`;
+    return s.length > 40 ? `${s.slice(0, 39)}…` : s;
+  } catch {
+    return raw.length > 40 ? `${raw.slice(0, 39)}…` : raw;
+  }
+}
+
 export function CitationList({
   citations,
   onOpenDocument,
@@ -23,6 +35,11 @@ export function CitationList({
             <span className="citation-index">{index + 1}</span>
             <span className="citation-title">{citation.documentTitle}</span>
             {citation.page ? <span className="badge">p. {citation.page}</span> : null}
+            {citation.pageUrl ? (
+              <a className="badge" href={citation.pageUrl} target="_blank" rel="noopener noreferrer" title={citation.pageUrl}>
+                {shortUrl(citation.pageUrl)}
+              </a>
+            ) : null}
             <span className="badge">chunk {citation.ordinal + 1}</span>
             {showDiagnostics ? (
               <span className="citation-score" title="Cosine similarity against the query">

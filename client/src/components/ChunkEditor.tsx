@@ -3,6 +3,18 @@ import { api, ApiError } from '../api/client';
 import type { Chunk } from '../api/types';
 import { Spinner } from './Spinner';
 
+/** Compact a URL for a badge label: host + path, JS-truncated. */
+function shortUrl(raw: string): string {
+  try {
+    const u = new URL(raw);
+    const path = u.pathname === '/' ? '' : u.pathname;
+    const s = `${u.hostname.replace(/^www\./, '')}${path}`;
+    return s.length > 40 ? `${s.slice(0, 39)}…` : s;
+  } catch {
+    return raw.length > 40 ? `${raw.slice(0, 39)}…` : raw;
+  }
+}
+
 /**
  * Chunk viewer/editor.
  *
@@ -58,6 +70,18 @@ export function ChunkEditor({
       <div className="chunk-head">
         <span className="chunk-num">#{chunk.ordinal + 1}</span>
         {chunk.page ? <span className="badge">page {chunk.page}</span> : null}
+        {chunk.pageUrl ? (
+          <a
+            className="badge"
+            href={chunk.pageUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={chunk.pageTitle ? `${chunk.pageTitle} — ${chunk.pageUrl}` : chunk.pageUrl}
+            data-testid="chunk-page-url"
+          >
+            {shortUrl(chunk.pageUrl)}
+          </a>
+        ) : null}
         {chunk.edited ? (
           <span className="badge badge-edited" data-testid="chunk-edited-badge">
             edited

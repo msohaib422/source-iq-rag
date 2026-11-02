@@ -144,8 +144,14 @@ export function DocumentDetailPage() {
             </h1>
           )}
           <p className="subtitle">
-            {document_.originalName} · {document_.pageCount} pages · {total} chunks ·{' '}
-            {(document_.sizeBytes / 1024).toFixed(0)} KB
+            {document_.websiteUrl ? (
+              <a href={document_.websiteUrl} target="_blank" rel="noopener noreferrer" className="mono">
+                {document_.websiteUrl}
+              </a>
+            ) : (
+              document_.originalName
+            )}{' '}
+            · {document_.pageCount} pages · {total} chunks · {(document_.sizeBytes / 1024).toFixed(0)} KB
           </p>
         </div>
         <div className="row wrap">
@@ -202,7 +208,15 @@ export function DocumentDetailPage() {
       ) : null}
       {document_.status === 'failed' ? (
         <Alert tone="error" title="This document failed to index">
-          {document_.error ?? 'Unknown error.'} Delete it and re-upload a text-based PDF.
+          {document_.error ?? 'Unknown error.'}{' '}
+          {document_.sourceType === 'website'
+            ? 'Delete it and crawl the website again.'
+            : 'Delete it and re-upload a text-based PDF.'}
+        </Alert>
+      ) : null}
+      {document_.status === 'ready' && document_.crawl?.failedDetail ? (
+        <Alert tone="warning" title="Some pages were skipped">
+          {document_.crawl.failedDetail}
         </Alert>
       ) : null}
 

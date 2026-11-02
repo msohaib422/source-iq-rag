@@ -24,6 +24,7 @@ import type {
   VectorSearchParams,
 } from '../types/domain.js';
 import type {
+  ChunkRef,
   CreateChunkInput,
   CreateDocumentInput,
   CreateEvaluationInput,
@@ -78,6 +79,10 @@ const documentSchema = new Schema(
     chunkCount: { type: Number, default: 0 },
     status: { type: String, enum: ['pending', 'processing', 'ready', 'failed'], default: 'pending', index: true },
     error: { type: String, default: null },
+    // Website-ingestion metadata (absent/null for PDF uploads).
+    sourceType: { type: String, enum: ['pdf', 'website'], default: undefined },
+    websiteUrl: { type: String, default: null },
+    crawl: { type: Schema.Types.Mixed, default: null },
   },
   { timestamps: true, collection: 'documents' },
 );
@@ -95,6 +100,11 @@ const chunkSchema = new Schema(
     charStart: { type: Number, default: null },
     charEnd: { type: Number, default: null },
     edited: { type: Boolean, default: false },
+    // Website-ingestion metadata (absent for PDF chunks).
+    sourceType: { type: String, enum: ['pdf', 'website'], default: undefined },
+    pageUrl: { type: String, default: null },
+    pageTitle: { type: String, default: null },
+    websiteUrl: { type: String, default: null },
   },
   { timestamps: true, collection: 'chunks' },
 );
@@ -162,6 +172,7 @@ function mapUser(raw: Doc): UserRecord {
 }
 
 function mapDocument(raw: Doc): DocumentRecord {
+  const crawl = (raw.crawl as DocumentRecord['crawl']) ?? null;
   return {
     id: toId(raw._id),
     userId: toId(raw.userId),
@@ -175,6 +186,16 @@ function mapDocument(raw: Doc): DocumentRecord {
     chunkCount: Number(raw.chunkCount ?? 0),
     status: (raw.status as DocumentRecord['status']) ?? 'pending',
     error: (raw.error as string | null) ?? null,
+    ...(raw.sourceType === 'pdf' || raw.sourceType === 'website' ? { sourceType: raw.sourceType } : {}),
+    websiteUrl: (raw.websiteUrl as string | null) ?? null,
+    crawl: crawl
+      ? {
+          ...crawl,
+          startedAt: new Date(crawl.startedAt),
+          updatedAt: new Date(crawl.updatedAt),
+          completedAt: crawl.completedAt ? new Date(crawl.completedAt) : null,
+        }
+      : null,
     createdAt: (raw.createdAt as Date) ?? new Date(),
     updatedAt: (raw.updatedAt as Date) ?? new Date(),
   };
@@ -192,6 +213,10 @@ function mapChunk(raw: Doc): ChunkRecord {
     charStart: (raw.charStart as number | null) ?? null,
     charEnd: (raw.charEnd as number | null) ?? null,
     edited: Boolean(raw.edited),
+    ...(raw.sourceType === 'pdf' || raw.sourceType === 'website' ? { sourceType: raw.sourceType } : {}),
+    pageUrl: (raw.pageUrl as string | null) ?? null,
+    pageTitle: (raw.pageTitle as string | null) ?? null,
+    websiteUrl: (raw.websiteUrl as string | null) ?? null,
     createdAt: (raw.createdAt as Date) ?? new Date(),
     updatedAt: (raw.updatedAt as Date) ?? new Date(),
   };
@@ -394,7 +419,10 @@ export class MongoStore implements Store {
   ): Promise<DocumentRecord | null> {
     if (!mongoose.isValidObjectId(id)) return null;
     const allowed: Record<string, unknown> = {};
-    for (const key of ['title', 'status', 'error', 'pageCount', 'charCount', 'chunkCount', 'storagePath'] as const) {
+    for (const key of [
+      'title', 'status', 'error', 'pageCount', 'charCount', 'chunkCount', 'storagePath',
+      'sizeBytes', 'sourceType', 'websiteUrl', 'crawl',
+    ] as const) {
       if (patch[key] !== undefined) allowed[key] = patch[key];
     }
     const doc = await this.Document.findOneAndUpdate(
@@ -430,6 +458,17 @@ export class MongoStore implements Store {
     if (options.limit) q = q.limit(options.limit);
     const docs = await q.select('-embedding').lean().exec();
     return docs.map((d) => mapChunk(d as Doc));
+  }
+
+  async listChunkRefs(documentId: string): Promise<ChunkRef[]> {
+    if (!mongoose.isValidObjectId(documentId)) return [];
+    // Deliberately projects only the two fields website ingestion needs, so
+    // resume checks never pull chunk text (bounded memory on huge documents).
+    const docs = await this.Chunk.find({ documentId: objectId(documentId) })
+      .select('pageUrl ordinal')
+      .lean()
+      .exec();
+    return docs.map((d) => ({ pageUrl: (d.pageUrl as string | null) ?? null, ordinal: Number(d.ordinal) }));
   }
 
   async getChunk(id: string, userId: string): Promise<ChunkRecord | null> {
@@ -520,6 +559,10 @@ export class MongoStore implements Store {
         charStart: 1,
         charEnd: 1,
         edited: 1,
+        sourceType: 1,
+        pageUrl: 1,
+        pageTitle: 1,
+        websiteUrl: 1,
         createdAt: 1,
         updatedAt: 1,
         score: { $meta: 'vectorSearchScore' },

@@ -10,6 +10,28 @@ export interface User {
 
 export type DocumentStatus = 'pending' | 'processing' | 'ready' | 'failed';
 
+/**
+ * Persisted Firecrawl job state (mirrors the server's WebsiteCrawlState).
+ * Progress is driven client-side: each poll of POST /api/websites/:id/advance
+ * returns the updated document carrying this state.
+ */
+export interface WebsiteCrawlState {
+  jobId: string;
+  /** Firecrawl job status; `failed`/`cancelled` are terminal on their side. */
+  status: 'scraping' | 'completed' | 'failed' | 'cancelled';
+  /** Our pipeline phase: `indexing` runs once the Firecrawl job completes. */
+  phase: 'scraping' | 'indexing' | 'completed' | 'failed';
+  crawled: number;
+  discovered: number | null;
+  indexed: number;
+  failedDetail: string | null;
+  /** Last transient API error; the next poll retries automatically. */
+  lastError: string | null;
+  startedAt: string;
+  updatedAt: string;
+  completedAt: string | null;
+}
+
 export interface SourceDocument {
   id: string;
   userId: string;
@@ -24,6 +46,12 @@ export interface SourceDocument {
   error: string | null;
   createdAt: string;
   updatedAt: string;
+  /** 'pdf' for uploads, 'website' for Firecrawl crawls (absent on legacy rows). */
+  sourceType?: 'pdf' | 'website';
+  /** Submitted seed URL for website crawls. */
+  websiteUrl?: string | null;
+  /** Crawl job state; only present on website documents. */
+  crawl?: WebsiteCrawlState | null;
 }
 
 export interface Chunk {
@@ -39,6 +67,14 @@ export interface Chunk {
   createdAt: string;
   updatedAt: string;
   embeddingDimensions?: number;
+  /** 'pdf' for uploads, 'website' for crawled pages (absent on legacy rows). */
+  sourceType?: 'pdf' | 'website';
+  /** The crawled page this chunk came from (website chunks only). */
+  pageUrl?: string | null;
+  /** Page title reported by Firecrawl (website chunks only). */
+  pageTitle?: string | null;
+  /** Seed URL of the crawl this page belongs to (website chunks only). */
+  websiteUrl?: string | null;
 }
 
 export interface Citation {
@@ -49,6 +85,8 @@ export interface Citation {
   page: number | null;
   score: number;
   snippet: string;
+  /** Crawled page the passage came from (website citations only). */
+  pageUrl?: string | null;
 }
 
 export interface ChatMessage {

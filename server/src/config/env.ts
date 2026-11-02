@@ -97,6 +97,13 @@ const envSchema = z.object({
   VECTOR_NUM_CANDIDATES: z.coerce.number().int().positive().default(150),
   VECTOR_LIMIT: z.coerce.number().int().positive().default(8),
 
+  // ---- Website ingestion (Firecrawl Crawl API) ----
+  // The key is backend-only; the browser never sees it. Website crawling is
+  // disabled (route returns 503) when the key is absent.
+  FIRECRAWL_API_KEY: z.string().trim().optional(),
+  // Maximum pages a single crawl may collect; kept adjustable and bounded.
+  FIRECRAWL_MAX_PAGES: z.coerce.number().int().min(1).max(10_000).default(100),
+
   // ---- LLM providers ----
   LLM_PROVIDER: z.enum(['groq', 'mistral', 'openrouter', 'openai', 'gemini', 'mock']).default('mock'),
   LLM_MODEL: z.string().optional(),

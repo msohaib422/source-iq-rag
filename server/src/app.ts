@@ -14,6 +14,7 @@ import { documentsRouter } from './routes/documents.js';
 import { healthRouter } from './routes/health.js';
 import { queriesRouter } from './routes/queries.js';
 import { evaluationsRouter } from './routes/evaluations.js';
+import { websitesRouter } from './routes/websites.js';
 
 export function createApp(context?: AppContext): Express {
   const app = express();
@@ -70,6 +71,7 @@ export function createApp(context?: AppContext): Express {
   app.use('/api/health', healthRouter);
   app.use('/api/auth', authRouter);
   app.use('/api/documents', documentsRouter);
+  app.use('/api/websites', websitesRouter);
   app.use('/api/chunks', chunksRouter);
   app.use('/api/queries', queriesRouter);
   app.use('/api/evaluations', evaluationsRouter);
